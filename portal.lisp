@@ -274,7 +274,7 @@ Could also return :eof, :close."
              (return-from read-frame :close))
             ;; begining a text frame
             ((= opcode +text+)
-             (setf (slot-value websocket 'opcode) opcode)
+             (setf (slot-value websocket 'fragment-opcode) opcode)
              (append-stash
               websocket
               (handler-case
@@ -283,7 +283,7 @@ Could also return :eof, :close."
                 (t () (return-from read-frame :close)))))
             ;; begining a binary frame
             ((= opcode +binary+)
-             (setf (slot-value websocket 'opcode) opcode)
+             (setf (slot-value websocket 'fragment-opcode) opcode)
              (append-stash websocket payload))
             (:else
              (return-from read-frame :close)))
