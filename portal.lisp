@@ -41,24 +41,35 @@ set to the origin (www.example.com).")
 (defconstant +closing+ 2)
 (defconstant +closed+ 3)
 
-(defparameter path-handlers (make-hash-table :test #'equal)
-  "Key: path, Value: list of handler functions")
+(defparameter path-handlers (list)
+  "Alist of path handler functions.
+Key: path, Value: list of handler functions")
 
 (defun define-path-handler
     (path &key
-            (connect (lambda (socket)
-                       (declare (ignore socket))))
-            (message (lambda (socket message)
-                       (declare (ignore socket message))))
-            (disconnect (lambda (socket)
-                          (declare (ignore socket))))
-            (error (lambda (socket condition)
-                     (declare (ignore socket condition)))))
-  (setf (gethash (string-downcase path) path-handlers)
-        (list connect
-              message
-              disconnect
-              error)))
+            (connect (lambda (websocket)
+                       (declare (ignore websocket))))
+            (message (lambda (websocket message)
+                       (declare (ignore websocket message))))
+            (disconnect (lambda (websocket)
+                          (declare (ignore websocket))))
+            (error (lambda (websocket condition)
+                     (declare (ignore websocket condition)))))
+  (if (assoc (string-downcase path)
+             path-handlers)
+      (setf (cdr (assoc (string-downcase path)
+                        path-handlers))
+            (list connect
+                  message
+                  disconnect
+                  error))
+      (setf path-handlers
+            (acons (string-downcase path)
+                   (list connect
+                         message
+                         disconnect
+                         error)
+                   path-handlers))))
 
 (defun starts-with (start list)
   (cond
@@ -174,7 +185,8 @@ If nil, the second value will be the reason."
        (or (-<>> header
              (assoc :script)
              (cdr)
-             (gethash <> path-handlers))
+             (assoc <> path-handlers
+                    :test #'str:starts-with-p))
            (values nil :script)))
     (t () (values nil :request))))
 
@@ -304,13 +316,15 @@ Could also return :eof, :close."
         (header)
         (assoc :script)
         (cdr)
-        (gethash <> path-handlers))
     (declare (ignore connect message))
     (setf (ready-state websocket)
           +closing+)
     ;; TODO: send disconnect frame
     (setf (ready-state websocket)
           +closed+)))
+            (assoc <> path-handlers
+                   :test #'str:starts-with-p)
+            (cdr))
         (call-with-handler error disconnect websocket)
 
 (defun websocket-handler (stream)
@@ -321,8 +335,12 @@ Could also return :eof, :close."
         (can-upgrade-p header)
       (if can-upgrade
           (destructuring-bind (connect message disconnect error)
-              (gethash (cdr (assoc :script header))
-                       path-handlers)
+              (-<>> header
+                (assoc :script)
+                (cdr)
+                (assoc <> path-handlers
+                       :test #'str:starts-with-p)
+                (cdr))
             (declare (ignore disconnect))
             (let ((websocket (make-instance 'websocket
                                              :header header
