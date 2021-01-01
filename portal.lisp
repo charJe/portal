@@ -39,7 +39,8 @@ set to the origin (www.example.com).")
 ;; socket ready state
 (defconstant +connecting+ 0)
 (defconstant +ready+ 1)
-(defconstant +closing+ 2)
+(defconstant +closing+ 2
+  "When the first closing frame has been sent or received.")
 (defconstant +closed+ 3)
 
 (defparameter path-handlers (list)
@@ -242,8 +243,9 @@ Could also return :eof, :close."
            (mask (< 0 (logand b1 #b10000000)))
            (len (logand b1 #b1111111)))
       ;; A server MUST close the connection upon receiving a frame with
-      ;; the MASK bit set to 0.
-      (when (null mask)
+      (when (or (null mask)
+                ;; client close frame
+                (= opcode +close+))
         (return-from read-frame :close))
       (let ((len (cond
                    ((<= len 125) len)
@@ -267,6 +269,9 @@ Could also return :eof, :close."
                                               (elt mask (mod index 4))))))
           ;; TODO: implement ping & pong and close
           (cond
+            ;; closing frame
+            ((= opcode +close+)
+             (return-from read-frame :close))
             ;; begining a text frame
             ((= opcode +text+)
              (setf (slot-value websocket 'opcode) opcode)
@@ -324,23 +329,43 @@ Could also return :eof, :close."
      stream)
     (force-output stream)
     message))
+(defmethod send-close-frame ((websocket websocket))
+  (write-sequence
+   (list (+ #b10000000 +close+) 0)
+   (socket-stream websocket))
+  (force-output (socket-stream websocket))
+  (setf (slot-value websocket 'sent-close-frame) t)
+  (setf (slot-value websocket 'ready-state) +closing+))
 (defmethod close ((websocket websocket) &rest abort)
   (declare (ignore abort))
-  (destructuring-bind (connect message disconnect error)
-      (-<>> websocket
-        (header)
-        (assoc :script)
-        (cdr)
-    (declare (ignore connect message))
-    (setf (ready-state websocket)
-          +closing+)
-    ;; TODO: send disconnect frame
-    (setf (ready-state websocket)
-          +closed+)))
+  (when (= (ready-state websocket)
+           +closed+)
+    (return-from close))
+  (if (= (ready-state websocket)
+         +closing+)
+      ;; in closing state
+      ;; run custom function
+      (destructuring-bind (connect message disconnect error)
+          (-<>> websocket
+            (header)
+            (assoc :script)
+            (cdr)
             (assoc <> path-handlers
                    :test #'str:starts-with-p)
             (cdr))
+        (declare (ignore connect message))
         (call-with-handler error disconnect websocket)
+        (if (sent-close-frame-p websocket)
+            ;; client initiated close
+            ;; send response close frame
+            (send-close-frame websocket)
+            ;; server initiated close
+            ;; close TCP socket
+            (cl:close (socket-stream websocket)))
+        (setf (slot-value websocket 'ready-state)
+              +closed+))
+      ;; just send close frame to enter closing state
+      (send-close-frame websocket)))
 
 (defun websocket-handler (stream)
   ;; connect
@@ -382,18 +407,19 @@ Could also return :eof, :close."
                                   (sha1:sha1-base64))))))
                 :external-format :utf-8)
                stream)
+              (force-output stream)
               ;; custom connect function
               (call-with-handler error connect websocket)
               (setf (slot-value websocket 'ready-state)
                     +ready+)
               ;; messages
-              (loop while (= +ready+ (ready-state websocket))
-                    with stream = stream
+              (loop while (member (ready-state websocket)
+                                  (list +ready+ +closing+))
                     for payload = (read-frame websocket)
-                    while (not (member payload (list :eof :close)))
-                    if payload
-              ;; disconnect
-              (close websocket)
+                    while (not (eq payload :eof))
+                    if (eq payload :close) do
+                      (close websocket)
+                    else if payload do
                       (call-with-handler error message websocket payload))))
           ;; headers that can't upgrade
           (progn
@@ -407,7 +433,7 @@ Could also return :eof, :close."
                 (cons :reason reason)))
               :external-format :utf-8)
              stream)
-            (force-output stream))))))))
+            (force-output stream))))))
 
 (defun websocket-server (&optional (port 4433) multi-thread)
   (socket-server *wildcard-host* port
@@ -448,6 +474,8 @@ Could also return :eof, :close."
                            "SEC-WEBSOCKET-ACCEPT: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="))
                              +crlf+ +crlf+)))
 
+(setq global-socket nil)
+
 (define-path-handler "/add1"
   :connect (lambda (socket)
              (send socket "Welcome to add1 server."))
@@ -455,14 +483,18 @@ Could also return :eof, :close."
              (send socket
                    (->> message
                      (parse-integer)
-                     (1+)))))
+                     (1+))))
+  :disconnect (lambda (socket)
+                (send socket "Goodbye.")))
 
 (define-path-handler "/echo"
-  :connect (lambda (socket)
-             (send socket "Welcome to echo server."))
-  :message (lambda (socket message)
-             (send socket message)))
+  :connect (lambda (websocket)
+             (send websocket "Welcome to echo server."))
+  :message (lambda (websocket message)
+             (send websocket message)))
 
 (define-path-handler "/no"
   :connect (lambda (socket)
              (close socket)))
+
+(defparameter server (websocket-server))
