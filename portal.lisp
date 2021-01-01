@@ -226,6 +226,14 @@ If nil, the second value will be the reason."
 (defmethod clear-stash ((websocket websocket))
   (with-slots (stash) websocket
     (setf stash (list))))
+(defmethod send-pong ((websocket websocket) message)
+  (with-slots (stream) websocket
+    (write-sequence
+     (list (+ #b10000000 +pong+)
+           (length message))
+     stream)
+    (write-sequence message stream)
+    (force-output stream)))
 (defmethod read-frame ((websocket websocket))
   "Read a from from the stream of WEBSOCKET.
 when the frame is the last one in a series, return the complete message.
@@ -272,6 +280,8 @@ Could also return :eof, :close."
             ;; closing frame
             ((= opcode +close+)
              (return-from read-frame :close))
+            ((= opcode +ping+)
+             (send-pong websocket payload))
             ;; begining a text frame
             ((= opcode +text+)
              (setf (slot-value websocket 'fragment-opcode) opcode)
