@@ -25,7 +25,8 @@ set to the origin (www.example.com).")
 (defconstant +sec-key+
   "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 
-(defconstant +http-version+ "HTTP/1.1")
+(defconstant +http-version+
+  "HTTP/1.1")
 
 ;; frame control codes
 (defconstant +continuation+ #x0)
@@ -270,8 +271,9 @@ Could also return :eof, :close."
             ((= opcode +text+)
              (append-stash
               websocket
-              (handler-case (flex:octets-to-string payload :external-format :utf-8)
-                ;; payload must be valid utf-8
+              (handler-case
+                  ;; payload must be valid utf-8
+                  (flex:octets-to-string payload :external-format :utf-8)
                 (t () (return-from read-frame :close)))))
             ;; begining a binary frame
             ((= opcode +binary+)
@@ -353,9 +355,10 @@ Could also return :eof, :close."
                        :test #'str:starts-with-p)
                 (cdr))
             (declare (ignore disconnect))
-            (let ((websocket (make-instance 'websocket
-                                             :header header
-                                             :stream stream)))
+            (let ((websocket (make-instance
+                              'websocket
+                              :header header
+                              :stream stream)))
               ;; start connecting
               (setf (ready-state websocket)
                     +connecting+)
