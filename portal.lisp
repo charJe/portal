@@ -101,10 +101,21 @@ Key: path, Value: list of handler functions")
   "Return the alist corresponding to the request header STRING."
   (let ((lines (str:split +crlf+ string :omit-nulls t)))
     (append
-     (->> lines
-       (first)
-       (str:split " ")
-       (map 'list #'cons (list :method :script :version)))
+     (let ((parts (str:split " " (first lines))))
+       (append
+        (list (cons :method (first parts)))
+        ;; path
+        (list (cons :script
+                    (->> (second parts)
+                      (position #\?)
+                      (subseq (second parts) 0)
+                      (string-downcase))))
+        ;; query string
+        (when (find #\? (second parts))
+          (list (cons :query-string
+                      (subseq (second parts)
+                              (+ (position #\? (second parts)) 1)))))
+        (list (cons :version (third parts)))))
      (->> lines
       (rest)
       (map 'list
@@ -407,13 +418,13 @@ Could also return :eof, :close."
   (bt:destroy-thread websocket-server))
 
 (assert (equal (header->alist
-                (str:join +crlf+ '("GET /chat HTTP/1.1"
+                (str:join +crlf+ '("GET /chat?name=value HTTP/1.1"
                                    "Host: example.com:8000"
                                    "Upgrade: websocket"
                                    "Connection: Upgrade"
                                    "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=="
                                    "Sec-WebSocket-Version: 13" "")))
-               '((:METHOD . "GET") (:SCRIPT . "/chat") (:VERSION . "HTTP/1.1")
+               '((:METHOD . "GET") (:SCRIPT . "/chat") (:QUERY-STRING . "name=value")(:VERSION . "HTTP/1.1")
                  (:HOST . "example.com:8000") (:UPGRADE . "websocket")
                  (:CONNECTION . "Upgrade") (:SEC-WEBSOCKET-KEY . "dGhlIHNhbXBsZSBub25jZQ==")
                  (:SEC-WEBSOCKET-VERSION . "13"))))
