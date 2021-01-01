@@ -66,6 +66,15 @@ set to the origin (www.example.com).")
     ((equal (first start) (first list))
      (starts-with (rest start) (rest list)))))
 
+(defmacro call-with-handler (handler function &rest arguments)
+  (let ((condition (gensym)))
+    `(handler-case
+         (funcall ,function ,@arguments)
+       (t (,condition)
+         (funcall ,handler (first ',arguments) ,condition)
+         (when *debug-on-error*
+           (error ,condition))))))
+
 (defun read-until (string &optional (stream *standard-input*))
   (loop with test = (map 'list 'char-code (reverse string))
         with result = (list)
@@ -299,15 +308,10 @@ Could also return :eof, :close."
     (declare (ignore connect message))
     (setf (ready-state websocket)
           +closing+)
-    (handler-case
-        (funcall disconnect websocket)
-      (t (condition)
-        (funcall error websocket condition)
-        (when *debug-on-error*
-          (error condition))))
     ;; TODO: send disconnect frame
     (setf (ready-state websocket)
           +closed+)))
+        (call-with-handler error disconnect websocket)
 
 (defun websocket-handler (stream)
   ;; connect
@@ -345,13 +349,8 @@ Could also return :eof, :close."
                 :external-format :utf-8)
                stream)
               ;; custom connect function
-              (handler-case
-                  (funcall connect websocket)
-                (t (condition)
-                  (funcall error websocket condition)
-                  (when *debug-on-error*
-                    (error condition))))
               (setf (ready-state websocket)
+              (call-with-handler error connect websocket)
                     +ready+)
               ;; messages
               (loop while (= +ready+ (ready-state websocket))
@@ -359,14 +358,9 @@ Could also return :eof, :close."
                     for payload = (read-frame websocket)
                     while (not (member payload (list :eof :close)))
                     if payload
-                      do (handler-case
-                             (funcall message websocket payload)
-                           (t (condition)
-                             (funcall error websocket condition)
-                             (when *debug-on-error*
-                               (error condition)))))
               ;; disconnect
               (close websocket)
+                      (call-with-handler error message websocket payload))))
           ;; headers that can't upgrade
           (progn
             (write-sequence
