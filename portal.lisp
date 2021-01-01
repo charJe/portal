@@ -212,7 +212,7 @@ If nil, the second value will be the reason."
                     "Store the type of frame we are currently on.")
    (stash :type list :initform (list) :reader stash :documentation
           "Store the message content before all fames have arrived.")
-   (sent-close-frame :type boolean :reader sent-close-frame-p)))
+   (sent-close-frame :initform nil :type boolean :reader sent-close-frame-p)))
 (defmethod append-stash ((websocket websocket) sequence)
   (with-slots (stash) websocket
     (push sequence stash)))
