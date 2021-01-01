@@ -205,12 +205,13 @@ If nil, the second value will be the reason."
 (defclass websocket ()
   ((header :type list :initarg :header :reader header)
    (stream :type stream :initarg :stream :accessor socket-stream)
-   (ready-state :type number :accessor ready-state
+   (ready-state :type number :reader ready-state
                 :initform 0)
-   (fragment-opcode :accessor opcode :documentation
+   (fragment-opcode :reader opcode :documentation
                     "Store the type of frame we are currently on.")
    (stash :type list :initform (list) :reader stash :documentation
-          "Store the message content before all fames have arrived.")))
+          "Store the message content before all fames have arrived.")
+   (sent-close-frame :type boolean :reader sent-close-frame-p)))
 (defmethod append-stash ((websocket websocket) sequence)
   (with-slots (stash) websocket
     (push sequence stash)))
@@ -240,7 +241,6 @@ Could also return :eof, :close."
                          opcode)))
            (mask (< 0 (logand b1 #b10000000)))
            (len (logand b1 #b1111111)))
-      (setf (opcode websocket) opcode)
       ;; A server MUST close the connection upon receiving a frame with
       ;; the MASK bit set to 0.
       (when (null mask)
@@ -269,6 +269,7 @@ Could also return :eof, :close."
           (cond
             ;; begining a text frame
             ((= opcode +text+)
+             (setf (slot-value websocket 'opcode) opcode)
              (append-stash
               websocket
               (handler-case
@@ -277,6 +278,7 @@ Could also return :eof, :close."
                 (t () (return-from read-frame :close)))))
             ;; begining a binary frame
             ((= opcode +binary+)
+             (setf (slot-value websocket 'opcode) opcode)
              (append-stash websocket payload))
             (:else
              (return-from read-frame :close)))
@@ -360,7 +362,7 @@ Could also return :eof, :close."
                               :header header
                               :stream stream)))
               ;; start connecting
-              (setf (ready-state websocket)
+              (setf (slot-value websocket 'ready-state)
                     +connecting+)
               ;; send accept response header
               (write-sequence
@@ -381,8 +383,8 @@ Could also return :eof, :close."
                 :external-format :utf-8)
                stream)
               ;; custom connect function
-              (setf (ready-state websocket)
               (call-with-handler error connect websocket)
+              (setf (slot-value websocket 'ready-state)
                     +ready+)
               ;; messages
               (loop while (= +ready+ (ready-state websocket))
