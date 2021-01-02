@@ -7,6 +7,7 @@
   (:export :define-path-handler
            :websocket
            :send
+           :send-ping
            :close
            :websocket-server
            :websocket-server-close
@@ -227,10 +228,23 @@ If nil, the second value will be the reason."
   (with-slots (stash) websocket
     (setf stash (list))))
 (defmethod send-pong ((websocket websocket) message)
+  (declare (type (array (unsigned-byte 8)) message))
+  (when (< 125 (length message))
+    (error "Message cannot be greater than 125 bytes"))
   (with-slots (stream) websocket
     (write-sequence
      (list (+ #b10000000 +pong+)
            (length message))
+     stream)
+    (write-sequence message stream)
+    (force-output stream)))
+(defmethod send-ping ((websocket websocket) message)
+  (declare (type (array (unsigned-byte 8)) message))
+  (when (< 125 (length message))
+    (error "Message cannot be greater than 125 bytes"))
+  (with-slots (stream) websocket
+    (write-sequence
+     (list (+ #b10000000 +ping+) (length message))
      stream)
     (write-sequence message stream)
     (force-output stream)))
