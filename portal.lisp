@@ -242,7 +242,8 @@ Could also return :eof, :close."
          (b0 (read-byte stream nil :eof)))
     (when (eq :eof b0)
       (return-from read-frame :eof))
-    (let* ((b1 (read-byte stream))
+    (let* ((b1 (or (read-byte stream nil)
+                   (return-from read-frame :eof)))
            (fin (< 0 (logand b0 #b10000000)))
            (opcode (let ((opcode (logand b0 #b1111)))
                      (if (= opcode +continuation+)
@@ -260,20 +261,24 @@ Could also return :eof, :close."
                    ((= len 126)
                     (reduce             ;read 2 bytes as int
                      #'+ (loop for place from 1 downto 0
-                               collect (* (read-byte stream)
+                               collect (* (or (read-byte stream nil)
+                                              (return-from read-frame :eof))
                                           (expt 2 (* 8 place))))))
                    ((= len 127)
                     (reduce            ;read 8 bytes as int
                      #'+ (loop for place from  7 downto 0
-                               collect (* (read-byte stream)
+                               collect (* (or (read-byte stream nil)
+                                              (return-from read-frame :eof))
                                           (expt 2 (* 8 place)))))))))
         ;; read masking key
         (let* ((mask (coerce (loop for place from 3 downto 0
-                                   collect (read-byte stream))
+                                   collect (or (read-byte stream nil)
+                                               (return-from read-frame :eof)))
                              'vector))
                ;; read payload
                (payload (loop for index from 0 below len
-                              collect (logxor (read-byte stream)
+                              collect (logxor (or (read-byte stream nil)
+                                                  (return-from read-frame :eof))
                                               (elt mask (mod index 4))))))
           ;; TODO: implement ping & pong and close
           (cond
