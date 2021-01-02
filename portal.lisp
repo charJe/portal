@@ -1,4 +1,3 @@
-(ql:quickload '(usocket-server arrows str sha1 flexi-streams))
 (in-package #:portal)
 
 (defparameter origin nil
