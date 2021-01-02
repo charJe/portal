@@ -22,10 +22,8 @@ set to the origin (www.example.com).")
 
 (defconstant +crlf+
   (coerce (list (code-char 13) (code-char 10)) 'string))
-
 (defconstant +sec-key+
   "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
-
 (defconstant +http-version+
   "HTTP/1.1")
 
