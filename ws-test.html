@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<meta charset="utf-8" />
+<title>WebSocket Test</title>
+<script language="javascript" type="text/javascript">
+
+  var output;
+  var websocket;
+  function init()
+  {
+      let wsUri = document.getElementById("ws-uri").value;
+      output = document.getElementById("output");
+      console.log("wsuri",wsUri);
+      websocket = new WebSocket(wsUri);
+      websocket.onopen = onOpen;
+      websocket.onclose = onClose;
+      websocket.onmessage = onMessage;
+      websocket.onerror = onError;
+  }
+
+  function onOpen(evt)
+  {
+      writeToScreen("CONNECTED");
+  }
+
+  function onClose(evt)
+  {
+      writeToScreen("DISCONNECTED");
+  }
+
+  function onMessage(evt)
+  {
+      writeToScreen('<span style="color: blue;">RESPONSE: ' + evt.data+'</span>');
+  }
+
+  function onError(evt)
+  {
+      writeToScreen('<span style="color: red;">ERROR:</span> ' + evt.data);
+  }
+
+  function doSend(message)
+  {
+      writeToScreen("SENT: " + message);
+      websocket.send(message);
+  }
+
+  function writeToScreen(message)
+  {
+      var pre = document.createElement("p");
+      pre.style.wordWrap = "break-word";
+      pre.innerHTML = message;
+      output.appendChild(pre);
+  }
+
+  function buttonSend (message) {
+      doSend(document.getElementById("text").value);
+  }
+  
+  // window.addEventListener("load", init, false);
+
+  </script>
+
+<h2>WebSocket Test</h2>
+
+<input id="ws-uri" value="ws://localhost:4433/">
+<button onclick="init()">
+  Connect
+</button>
+<button onclick="websocket.close()">
+  Close
+</button>
+<br>
+<input id="text">
+<button onclick="buttonSend()">
+  Send
+</button>
+<div id="output"></div>
