@@ -78,14 +78,23 @@ Key: path, Value: list of handler functions")
     ((equal (first start) (first list))
      (starts-with (rest start) (rest list)))))
 
-(defmacro call-with-handler (handler function &rest arguments)
-  (let ((condition (gensym)))
-    `(handler-case
-         (funcall ,function ,@arguments)
-       (t (,condition)
-         (funcall ,handler (first ',arguments) ,condition)
-         (when *debug-on-error*
-           (error ,condition))))))
+(defun call-with-handler (handler function websocket &rest arguments)
+  (restart-case
+      (handler-case
+          (apply function websocket arguments)
+        (t (condition)
+          (funcall handler websocket condition)
+          (when *debug-on-error*
+            (error condition))))
+    (drop-client ()
+      :report "close the client websocket"
+      (close websocket))
+    (continue ()
+      :report "stop processing and continue with normal operations"
+      (continue))
+    (retry ()
+      :report "retry processing"
+      (apply #'call-with-handler handler function websocket arguments))))
 
 (defun read-until (string &optional (stream *standard-input*))
   (loop with test = (map 'list 'char-code (reverse string))
