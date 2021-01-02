@@ -119,23 +119,23 @@ Key: path, Value: list of handler functions")
                               (+ (position #\? (second parts)) 1)))))
         (list (cons :version (third parts)))))
      (->> lines
-      (rest)
-      (map 'list
-           (lambda (line)
-             (when (string/= line +crlf+)
-               (destructuring-bind (name part) (str:split ": " line)
-                 (cons (intern (string-upcase name)
-                               :keyword)
-                       part)))))
-      (remove-if #'null)))))
+       (rest)
+       (map 'list
+            (lambda (line)
+              (when (string/= line +crlf+)
+                (destructuring-bind (name part) (str:split ": " line)
+                  (cons (intern (string-upcase name)
+                                :keyword)
+                        part)))))
+       (remove-if #'null)))))
 
 (defun alist->header (alist)
   "Return the string response header corresponding to ALIST."
   (-<>> (format nil "~a ~a ~a~a"
-               (cdr (assoc :version alist))
-               (cdr (assoc :code alist))
-               (cdr (assoc :code-meaning alist))
-               +crlf+)
+                (cdr (assoc :version alist))
+                (cdr (assoc :code alist))
+                (cdr (assoc :code-meaning alist))
+                +crlf+)
     (reduce
      (lambda (header item)
        (if (member (car item) (list :version :code :code-meaning))
@@ -313,12 +313,12 @@ Could also return :eof, :close."
                       (format nil "~a" message)))
          (len (length message)))
     (declare (type number len))
-     (write-byte
-      (+ #b10000000                     ;fin
-         (if binary                   ;opcode
-             +binary+
-             +text+))
-      stream)
+    (write-byte
+     (+ #b10000000                      ;fin
+        (if binary                      ;opcode
+            +binary+
+            +text+))
+     stream)
     (write-byte
      (+ #b00000000                      ;mask
         (cond                           ;length
@@ -328,11 +328,13 @@ Could also return :eof, :close."
      stream)
     ;; extended length length
     (cond
-      ((< (expt 2 16) len)              ;most extended
+      ;; extended twice
+      ((< (expt 2 16) len)
        (loop for place from 7 downto 0 do
          (write-byte (logand len (* 15 (expt 2 (* 4 place))))
                      stream)))
-      ((<= (expt 2 16) len)             ;extended
+      ;; extended once
+      ((<= (expt 2 16) len)
        (loop for place from 7 downto 0 do
          (write-byte (logand len (* 15 (expt 2 (* 4 place))))
                      stream))))
@@ -483,11 +485,11 @@ Could also return :eof, :close."
                     (:connection . "Upgrade")
                     (:sec-websocket-accept . "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")))
                  (concatenate 'string (str:join +crlf+
-                         '("HTTP/1.1 101 Switching Protocols"
-                           "UPGRADE: websocket"
-                           "CONNECTION: Upgrade"
-                           "SEC-WEBSOCKET-ACCEPT: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="))
-                             +crlf+ +crlf+)))
+                                                '("HTTP/1.1 101 Switching Protocols"
+                                                  "UPGRADE: websocket"
+                                                  "CONNECTION: Upgrade"
+                                                  "SEC-WEBSOCKET-ACCEPT: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="))
+                              +crlf+ +crlf+)))
 
 (setq global-socket nil)
 
