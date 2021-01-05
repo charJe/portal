@@ -32,30 +32,30 @@ set to the origin (www.example.com).")
   "Alist of path handler functions.
 Key: path, Value: list of handler functions")
 
-(defun define-path-handler
+(defmacro define-path-handler
     (path &key
-            (connect (lambda (websocket)
+            (connect '(lambda (websocket)
                        (declare (ignore websocket))))
-            (message (lambda (websocket message)
+            (message '(lambda (websocket message)
                        (declare (ignore websocket message))))
-            (disconnect (lambda (websocket)
+            (disconnect '(lambda (websocket)
                           (declare (ignore websocket))))
-            (error (lambda (websocket condition)
+            (error '(lambda (websocket condition)
                      (declare (ignore websocket condition)))))
-  (if (assoc (string-downcase path)
+  `(if (assoc (string-downcase ,path)
              path-handlers)
-      (setf (cdr (assoc (string-downcase path)
+      (setf (cdr (assoc (string-downcase ,path)
                         path-handlers))
-            (list connect
-                  message
-                  disconnect
-                  error))
+            (list (quote ,connect)
+                  (quote ,message)
+                  (quote ,disconnect)
+                  (quote ,error)))
       (setf path-handlers
-            (acons (string-downcase path)
-                   (list connect
-                         message
-                         disconnect
-                         error)
+            (acons (string-downcase ,path)
+                   (list (quote ,connect)
+                         (quote ,message)
+                         (quote ,disconnect)
+                         (quote ,error))
                    path-handlers))))
 
 (defun starts-with (start list)
@@ -64,14 +64,29 @@ Key: path, Value: list of handler functions")
     ((equal (first start) (first list))
      (starts-with (rest start) (rest list)))))
 
-(defun call-with-handler (handler function websocket &rest arguments)
+(defun call-path-function (function-name websocket &rest arguments)
   (restart-case
-      (handler-case
-          (apply function websocket arguments)
-        (t (condition)
-          (funcall handler websocket condition)
-          (when *debug-on-error*
-            (error condition))))
+      (let* ((functions
+               (-<>> websocket
+                 (header)
+                 (assoc :script)
+                 (cdr)
+                 (assoc <> path-handlers
+                        :test #'str:starts-with-p)
+                 (cdr)))
+             (function (elt functions
+                            (case function-name
+                              (:connect 0)
+                              (:message 1)
+                              (:disconnect 2)
+                              (otherwise 3)))))
+        (handler-case
+            ;; custom connect function
+            (apply (eval function) websocket arguments)
+          (t (condition)
+            (funcall (eval (elt functions 3)) websocket condition)
+            (when *debug-on-error*
+              (error condition)))))
     (drop-client ()
       :report "close the client websocket"
       (close websocket))
@@ -80,7 +95,7 @@ Key: path, Value: list of handler functions")
       (continue))
     (retry ()
       :report "retry processing"
-      (apply #'call-with-handler handler function websocket arguments))))
+      (apply #'call-path-function function-name websocket arguments))))
 
 (defun read-until (string &optional (stream *standard-input*))
   (loop with test = (map 'list 'char-code (reverse string))
@@ -375,16 +390,8 @@ Could also return :eof, :close."
          +closing+)
       ;; in closing state
       ;; run custom function
-      (destructuring-bind (connect message disconnect error)
-          (-<>> websocket
-            (header)
-            (assoc :script)
-            (cdr)
-            (assoc <> path-handlers
-                   :test #'str:starts-with-p)
-            (cdr))
-        (declare (ignore connect message))
-        (call-with-handler error disconnect websocket)
+      (progn
+        (call-path-function :disconnect websocket)
         (if (sent-close-frame-p websocket)
             ;; client initiated close
             ;; send response close frame
@@ -404,53 +411,45 @@ Could also return :eof, :close."
     (multiple-value-bind (can-upgrade reason)
         (can-upgrade-p header)
       (if can-upgrade
-          (destructuring-bind (connect message disconnect error)
-              (-<>> header
-                (assoc :script)
-                (cdr)
-                (assoc <> path-handlers
-                       :test #'str:starts-with-p)
-                (cdr))
-            (declare (ignore disconnect))
-            (let ((websocket (make-instance
-                              'websocket
-                              :header header
-                              :stream stream)))
-              ;; start connecting
-              (setf (slot-value websocket 'ready-state)
-                    +connecting+)
-              ;; send accept response header
-              (write-sequence
-               (flex:string-to-octets
-                (alist->header
-                 (append (list
-                          (cons :version +http-version+)
-                          (cons :code 101)
-                          (cons :code-meaning "Switching Protocols")
-                          (cons :upgrade "websocket")
-                          (cons :connection "Upgrade")
-                          (cons :sec-websocket-accept
-                                (-<>> header
-                                  (assoc :sec-websocket-key)
-                                  (cdr)
-                                  (str:concat <> +sec-key+)
-                                  (sha1:sha1-base64))))))
-                :external-format :utf-8)
-               stream)
-              (force-output stream)
-              ;; custom connect function
-              (call-with-handler error connect websocket)
-              (setf (slot-value websocket 'ready-state)
-                    +ready+)
-              ;; messages
-              (loop while (member (ready-state websocket)
-                                  (list +ready+ +closing+))
-                    for payload = (read-frame websocket)
-                    while (not (eq payload :eof))
-                    if (eq payload :close) do
-                      (close websocket)
-                    else if payload do
-                      (call-with-handler error message websocket payload))))
+          (let ((websocket (make-instance
+                            'websocket
+                            :header header
+                            :stream stream)))
+            ;; start connecting
+            (setf (slot-value websocket 'ready-state)
+                  +connecting+)
+            ;; send accept response header
+            (write-sequence
+             (flex:string-to-octets
+              (alist->header
+               (append (list
+                        (cons :version +http-version+)
+                        (cons :code 101)
+                        (cons :code-meaning "Switching Protocols")
+                        (cons :upgrade "websocket")
+                        (cons :connection "Upgrade")
+                        (cons :sec-websocket-accept
+                              (-<>> header
+                                (assoc :sec-websocket-key)
+                                (cdr)
+                                (str:concat <> +sec-key+)
+                                (sha1:sha1-base64))))))
+              :external-format :utf-8)
+             stream)
+            (force-output stream)
+            ;; custom connect function
+            (call-path-function :connect websocket)
+            (setf (slot-value websocket 'ready-state)
+                  +ready+)
+            ;; messages
+            (loop while (member (ready-state websocket)
+                                (list +ready+ +closing+))
+                  for payload = (read-frame websocket)
+                  while (not (eq payload :eof))
+                  if (eq payload :close) do
+                    (close websocket)
+                  else if payload do
+                    (call-path-function :message websocket payload)))
           ;; headers that can't upgrade
           (progn
             (write-sequence
