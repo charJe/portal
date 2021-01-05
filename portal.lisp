@@ -341,14 +341,20 @@ Could also return :eof, :close."
     (cond
       ;; extended twice
       ((< (expt 2 16) len)
-       (loop for place from 7 downto 0 do
-         (write-byte (logand len (* 15 (expt 2 (* 4 place))))
-                     stream)))
+       (loop for place from 7 downto 0
+             for shift = (expt 2 (* 8 place))
+             do (write-byte
+                 (/ (logand len (* #b11111111 shift))
+                    shift)
+                 stream)))
       ;; extended once
-      ((<= (expt 2 16) len)
-       (loop for place from 7 downto 0 do
-         (write-byte (logand len (* 15 (expt 2 (* 4 place))))
-                     stream))))
+      ((<= 125 len)
+       (loop for place from 1 downto 0
+             for shift = (expt 2 (* 8 place))
+             do (write-byte
+                 (/ (logand len (* #b11111111 shift))
+                    shift)
+                 stream))))
     ;; payload
     (write-sequence message stream)
     (force-output stream)
