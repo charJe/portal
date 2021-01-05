@@ -313,11 +313,15 @@ Could also return :eof, :close."
           (when fin
             (prog1 (get-stash websocket)
               (clear-stash websocket))))))))
-(defmethod send ((websocket websocket) message &optional binary)
+(defmethod send ((websocket websocket) message)
   (let* ((stream (socket-stream websocket))
+         (binary (typep message '(array (unsigned-byte 8))))
          (message (if (typep message '(or string (array (unsigned-byte 8))))
                       message
                       (format nil "~a" message)))
+         (message (if binary
+                      message
+                      (flex:string-to-octets message :external-format :utf-8)))
          (len (length message)))
     (declare (type number len))
     (write-byte
@@ -346,11 +350,7 @@ Could also return :eof, :close."
          (write-byte (logand len (* 15 (expt 2 (* 4 place))))
                      stream))))
     ;; payload
-    (write-sequence
-     (if binary
-         message
-         (flex:string-to-octets message :external-format :utf-8))
-     stream)
+    (write-sequence message stream)
     (force-output stream)
     message))
 (defmethod send-close-frame ((websocket websocket))
