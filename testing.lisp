@@ -26,26 +26,31 @@
 ;;                               +crlf+ +crlf+)))
 
 (use-package 'arrows)
-(setq global-socket nil)
+(defparameter global-socket nil)
 
 (pws:define-path-handler "/add1"
   :connect (lambda (socket)
              (pws:send socket "Welcome to add1 server."))
   :message (lambda (socket message)
              (pws:send socket
-                   (->> message
-                     (parse-integer)
+                   (-> message
+                     (parse-integer :junk-allowed t)
                      (1+)))))
+
+(defun echo (websocket message)
+  (sleep 1)
+  (pws:send websocket message)
+  (sleep 1)
+  (pws:send websocket message))
 
 (pws:define-path-handler "/echo"
   :connect (lambda (websocket)
              (pws:send websocket "Welcome to echo server."))
-  :message (lambda (websocket message)
-             (pws:send websocket message)))
+  :message #'echo)
 
 (pws:define-path-handler "/no"
   :connect (lambda (socket)
              (pws:close socket)))
 
 (defparameter server
-  (pws:websocket-server 4433 :multi-thread))
+  (pws:websocket-server 4433))
