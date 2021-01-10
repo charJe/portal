@@ -7,6 +7,6 @@
            :send
            :send-ping
            :close
-           :websocket-server
-           :websocket-server-close
+           :server
+           :server-close
            :*debug-on-error*))
