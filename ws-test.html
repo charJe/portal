@@ -48,7 +48,7 @@
       var pre = document.createElement("p");
       pre.style.wordWrap = "break-word";
       pre.innerHTML = message;
-      output.appendChild(pre);
+      output.prepend(pre);
   }
 
   function buttonSend (message) {
