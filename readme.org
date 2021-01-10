@@ -16,6 +16,9 @@ A simple echo server.
     :connect (lambda (websocket)
                (pws:send websocket "Welcome to echo server."))
     :message (lambda (websocket message)
+               (sleep 1)
+               (pws:send websocket message)
+               (sleep 1)
                (pws:send websocket message)))
 #+END_SRC
 You can also define ~:disconnect~ function and a ~:error~ function in case something goes wrong in your other functions. You can't send any more messages after a disconnect has begun.
@@ -23,11 +26,11 @@ You can also define ~:disconnect~ function and a ~:error~ function in case somet
 ** Start a Server
 #+BEGIN_SRC lisp
   (defparameter server
-    (pws:websocket-server 4433))
+    (pws:server 4433))
 #+END_SRC
 
 Now connect to =ws://localhost:4433/echo= in a websocket tester and start echoing.
-You can add a ~:multi-thread~ argument to give each client it's own thread.
+You can add a ~:multi-thread~ argument to give each client its own thread.
 
 ** Disconnect Clients
 At any point, you can close a client websocket.
@@ -38,7 +41,7 @@ At any point, you can close a client websocket.
 ** Close Server
 To stop severing:
 #+BEGIN_SRC lisp
-  (pws:websocket-server-close server)
+  (pws:server-close server)
 #+END_SRC
 
 It is just a thread!
