@@ -213,7 +213,8 @@ If nil, the second value will be the reason."
     (t () (values nil :request))))
 
 (defclass websocket ()
-  ((header :type list :initarg :header :reader header)
+  ((header :type list :initarg :header :reader header :documentation
+           "HTTP header for websocket upgrade.")
    (stream :type stream :initarg :stream :accessor socket-stream)
    (ready-state :type number :reader ready-state
                 :initform 0)
