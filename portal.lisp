@@ -464,7 +464,7 @@ Could also return :eof, :close."
              stream)
             (force-output stream))))))
 
-(defun websocket-server (&optional (port 4433) multi-thread)
+(defun server (&optional (port 4433) multi-thread)
   (socket-server *wildcard-host* port
                  (lambda (stream)
                    (websocket-handler stream))
@@ -474,5 +474,5 @@ Could also return :eof, :close."
                  :element-type '(unsigned-byte 8)
                  :name "Websocket Server"))
 
-(defun websocket-server-close (websocket-server)
+(defun server-close (websocket-server)
   (bt:destroy-thread websocket-server))

@@ -53,4 +53,4 @@
              (pws:close socket)))
 
 (defparameter server
-  (pws:websocket-server 4433))
+  (pws:server 4433))
