@@ -38,6 +38,7 @@
                      (1+)))))
 
 (defun echo (websocket message)
+  (setq global-socket websocket)
   (sleep 1)
   (pws:send websocket message)
   (sleep 1)
@@ -46,7 +47,11 @@
 (pws:define-path-handler "/echo"
   :connect (lambda (websocket)
              (pws:send websocket "Welcome to echo server."))
-  :message #'echo)
+  :message #'echo
+  :disconnect (lambda (websocket)
+                (declare (ignore websocket))
+                (print 'leaving-echo)
+                (force-output)))
 
 (pws:define-path-handler "/no"
   :connect (lambda (socket)

@@ -221,8 +221,7 @@ If nil, the second value will be the reason."
    (fragment-opcode :reader opcode :documentation
                     "Store the type of frame we are currently on.")
    (stash :type list :initform (list) :reader stash :documentation
-          "Store the message content before all fames have arrived.")
-   (sent-close-frame :initform nil :type boolean :reader sent-close-frame-p)))
+          "Store the message content before all fames have arrived.")))
 (defmethod append-stash ((websocket websocket) sequence)
   (with-slots (stash) websocket
     (push sequence stash)))
@@ -260,7 +259,7 @@ If nil, the second value will be the reason."
 (defmethod read-frame ((websocket websocket))
   "Read a from from the stream of WEBSOCKET.
 when the frame is the last one in a series, return the complete message.
-Could also return :eof, :close."
+Could also return :eof, :close, :error."
   (let* ((stream (socket-stream websocket))
          (b0 (read-byte stream nil :eof)))
     (when (eq :eof b0)
@@ -275,10 +274,12 @@ Could also return :eof, :close."
            (mask (< 0 (logand b1 #b10000000)))
            (len (logand b1 #b1111111)))
       ;; A server MUST close the connection upon receiving a frame with
-      (when (or (null mask)
-                ;; client close frame
-                (= opcode +close+))
+      (unless mask
+        (return-from read-frame :error))
+      ;; client close frame
+      (when (= opcode +close+)
         (return-from read-frame :close))
+      ;; read length
       (let ((len (cond
                    ((<= len 125) len)
                    ((= len 126)
@@ -303,11 +304,7 @@ Could also return :eof, :close."
                               collect (logxor (or (read-byte stream nil)
                                                   (return-from read-frame :eof))
                                               (elt mask (mod index 4))))))
-          ;; TODO: implement ping & pong and close
           (cond
-            ;; closing frame
-            ((= opcode +close+)
-             (return-from read-frame :close))
             ((= opcode +ping+)
              (send-pong websocket payload))
             ;; begining a text frame
@@ -318,13 +315,13 @@ Could also return :eof, :close."
               (handler-case
                   ;; payload must be valid utf-8
                   (flex:octets-to-string payload :external-format :utf-8)
-                (t () (return-from read-frame :close)))))
+                (t () (return-from read-frame :error)))))
             ;; begining a binary frame
             ((= opcode +binary+)
              (setf (slot-value websocket 'fragment-opcode) opcode)
              (append-stash websocket payload))
             (:else
-             (return-from read-frame :close)))
+             (return-from read-frame :error)))
           ;; return message if all frames have been processed
           (when fin
             (prog1 (get-stash websocket)
@@ -379,31 +376,19 @@ Could also return :eof, :close."
   (write-sequence
    (list (+ #b10000000 +close+) 0)
    (socket-stream websocket))
-  (force-output (socket-stream websocket))
-  (setf (slot-value websocket 'sent-close-frame) t)
-  (setf (slot-value websocket 'ready-state) +closing+))
+  (force-output (socket-stream websocket)))
 (defmethod close ((websocket websocket) &rest abort)
   (declare (ignore abort))
   (when (= (ready-state websocket)
            +closed+)
     (return-from close))
-  (if (= (ready-state websocket)
-         +closing+)
-      ;; in closing state
-      ;; run custom function
-      (progn
-        (call-path-function :disconnect websocket)
-        (if (sent-close-frame-p websocket)
-            ;; client initiated close
-            ;; send response close frame
-            (send-close-frame websocket)
-            ;; server initiated close
-            ;; close TCP socket
-            (cl:close (socket-stream websocket)))
-        (setf (slot-value websocket 'ready-state)
-              +closed+))
-      ;; just send close frame to enter closing state
-      (send-close-frame websocket)))
+  ;; send close frame
+  (send-close-frame websocket)
+  ;; move to disconnecting state
+  (setf (slot-value websocket 'ready-state)
+        +closing+)
+  ;; run function
+  (call-path-function :disconnect websocket))
 
 (defun websocket-handler (stream)
   ;; connect
@@ -445,12 +430,39 @@ Could also return :eof, :close."
             ;; messages
             (loop while (member (ready-state websocket)
                                 (list +ready+ +closing+))
+                  ;; read new payload
                   for payload = (read-frame websocket)
-                  while (not (eq payload :eof))
-                  if (eq payload :close) do
+                  ;; close condition
+                  if (eq payload :eof) do
+                    (progn
+                      ;; close socket
+                      (cl:close (socket-stream websocket))
+                      ;; move to disconnecting state
+                      (setf (slot-value websocket 'ready-state)
+                            +closing+)
+                      ;; run function
+                      (call-path-function :disconnect websocket))
+                  else if (eq payload :error) do
+                    ;; send close frame
+                    ;; run function
                     (close websocket)
-                  else if payload do
-                    (call-path-function :message websocket payload)))
+                  else if (eq payload :close) do
+                    (if (= (ready-state websocket)
+                           +closing+)
+                        ;; close socket
+                        (cl:close (socket-stream websocket))
+                        ;;; else
+                        ;; send close frame
+                        ;; run function
+                        (close websocket))
+                  ;; exit if we closed
+                  while (not (keywordp payload))
+                  ;; call custom function
+                  if payload do
+                    (call-path-function :message websocket payload))
+            ;; move to closed state
+            (setf (slot-value websocket 'ready-state)
+                  +closed+))
           ;; headers that can't upgrade
           (progn
             (write-sequence
