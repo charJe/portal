@@ -57,5 +57,25 @@
   :connect (lambda (socket)
              (pws:close socket)))
 
+;; prevent entering debugger
+(setq pws:*debug-on-error* nil)
+
+(pws:define-path-handler "/err"
+
+  :connect (lambda (socket)
+             (pws:send socket "Welcome to error server."))
+
+  :message (lambda (socket message)
+             ;; error because message is a string
+             (pws:send socket (1+ message)))
+
+  :error (lambda (socket condition)
+           ;; echo error to websocket
+           (pws:send socket condition))
+
+  :disconnect (lambda (socket)
+                (declare (ignore socket))
+                (print "Socket leaving error server.")))
+
 (defparameter server
   (pws:server 4433))

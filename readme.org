@@ -5,7 +5,7 @@ Portable websockets for Common Lisp using [[https://github.com/usocket/usocket][
 1. Download to =quicklisp/local-projects=.
 2. ~(ql:quickload 'portal)~
 
-*  Use
+* Use
 
 ** Define a Resource
 Resources are identified by their path in the URL.
@@ -56,6 +56,31 @@ When defining a resource path, you can pass a ~:error~ argument with a function 
 There is a variable: ~pws:*debug-on-error*~; when it is non-nil, the debugger will be entered when there is a problem with one of your handler functions.
 it is bound to ~t~ by default.
 
+*** Example
+Here is another example, this time using the ~:error~ function sends the error over the websocket instead of entering the debugger, and the ~:disconnect~ just prints to the Lisp console.
+
+#+BEGIN_SRC lisp
+  ;; prevent entering debugger
+  (setq pws:*debug-on-error* nil)
+
+  (pws:define-path-handler "/err"
+
+    :connect (lambda (socket)
+               (pws:send socket "Welcome to error server."))
+
+    :message (lambda (socket message)
+               ;; error because message is a string
+               (pws:send socket (1+ message)))
+
+    :error (lambda (socket condition)
+             ;; echo error to websocket
+             (pws:send socket condition))
+
+    :disconnect (lambda (socket)
+                  (declare (ignore socket))
+                  (print "Socket leaving error server.")))
+
+#+END_SRC
 * Issues
 If you find any bugs of have any issues (installing, using, questions, adhering to RFC 6455) use the Github issue tracker.
 
