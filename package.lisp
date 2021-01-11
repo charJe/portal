@@ -1,12 +1,19 @@
 (defpackage portal
   (:nicknames :pws)
-  (:use #:cl #:usocket #:arrows)
+  (:use #:cl)
   (:shadow :close)
-  (:export :define-path-handler
-           :websocket
-           :send
-           :send-ping
-           :close
-           :server
-           :server-close
-           :*debug-on-error*))
+  (:import-from #:usocket
+   :socket
+   :socket-server
+   :*wildcard-host*)
+  (:import-from #:arrows
+   :-> :->> :-<>>)
+  (:export
+   :define-path-handler
+   :websocket
+   :send
+   :send-ping
+   :close
+   :server
+   :server-close
+   :*debug-on-error*))
