@@ -1,6 +1,6 @@
 (in-package #:portal)
 
-(defparameter origin nil
+(define-global-parameter -origin- nil
   "If Cross-Origin-Request-Sharing is disallowed,
 set to the origin (www.example.com).")
 
@@ -28,7 +28,7 @@ set to the origin (www.example.com).")
   "When the first closing frame has been sent or received.")
 (defconstant +closed+ 3)
 
-(defparameter path-handlers (list)
+(define-global-var -path-handlers- (list)
   "Alist of path handler functions.
 Key: path, Value: list of handler functions")
 
@@ -43,20 +43,20 @@ Key: path, Value: list of handler functions")
             (error '(lambda (websocket condition)
                      (declare (ignore websocket condition)))))
   `(if (assoc (string-downcase ,path)
-             path-handlers)
+             -path-handlers-)
       (setf (cdr (assoc (string-downcase ,path)
-                        path-handlers))
+                        -path-handlers-))
             (list (quote ,connect)
                   (quote ,message)
                   (quote ,disconnect)
                   (quote ,error)))
-      (setf path-handlers
+      (setf -path-handlers-
             (acons (string-downcase ,path)
                    (list (quote ,connect)
                          (quote ,message)
                          (quote ,disconnect)
                          (quote ,error))
-                   path-handlers))))
+                   -path-handlers-))))
 
 (defun starts-with (start list)
   (cond
@@ -71,7 +71,7 @@ Key: path, Value: list of handler functions")
                  (header)
                  (assoc :script)
                  (cdr)
-                 (assoc <> path-handlers
+                 (assoc <> -path-handlers-
                         :test #'str:starts-with-p)
                  (cdr)))
              (function (elt functions
@@ -185,7 +185,7 @@ If nil, the second value will be the reason."
        (or (assoc :sec-websocket-key header)
            (values nil :sec-websocket-key))
        ;; cors
-       (if origin
+       (if -origin-
            (or (->> header
                  (assoc :origin)
                  (cdr)
@@ -207,7 +207,7 @@ If nil, the second value will be the reason."
        (or (-<>> header
              (assoc :script)
              (cdr)
-             (assoc <> path-handlers
+             (assoc <> -path-handlers-
                     :test #'str:starts-with-p))
            (values nil :script)))
     (t () (values nil :request))))

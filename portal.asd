@@ -10,6 +10,7 @@
   :serial t
   :depends-on (#:usocket-server
                #:arrows
+               #:global-vars
                #:str
                #:sha1
                #:flexi-streams)

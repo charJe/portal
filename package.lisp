@@ -8,6 +8,9 @@
                 *wildcard-host*)
   (:import-from #:arrows
                 -> ->> -<>>)
+  (:import-from #:global-vars
+                define-global-var
+                define-global-parameter)
   (:export
    define-path-handler
    websocket
