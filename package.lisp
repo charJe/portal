@@ -12,7 +12,7 @@
                 define-global-var
                 define-global-parameter)
   (:export
-   define-path-handler
+   define-resource
    websocket
    send
    send-ping
