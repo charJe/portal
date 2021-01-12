@@ -32,7 +32,7 @@ set to the origin (www.example.com).")
   "Alist of resource handler functions.
 Key: path, Value: list of handler functions")
 
-(defmacro define-resource-handler
+(defmacro define-resource
     (path &key
             (open '(lambda (websocket)
                        (declare (ignore websocket))))
