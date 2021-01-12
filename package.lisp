@@ -14,6 +14,8 @@
   (:export
    define-resource
    websocket
+   header
+   ready-state
    send
    send-ping
    close
