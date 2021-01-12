@@ -12,7 +12,8 @@
                #:arrows
                #:global-vars
                #:str
-               #:sha1
+               #:ironclad
+               #:cl-base64
                #:flexi-streams)
   :components ((:file "package")
                (:file "portal" :depends-on ("package"))))

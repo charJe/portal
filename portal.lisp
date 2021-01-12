@@ -64,6 +64,13 @@ Key: path, Value: list of handler functions")
     ((equal (first start) (first list))
      (starts-with (rest start) (rest list)))))
 
+(defun sha1-base64 (string)
+  (let ((sha1 (ironclad:make-digest 'ironclad:sha1))
+        (bin-data (ironclad:ascii-string-to-byte-array string)))
+    (ironclad:update-digest sha1 bin-data)
+    (cl-base64:usb8-array-to-base64-string
+     (ironclad:produce-digest sha1))))
+
 (defun call-resource-function (function-name websocket &rest arguments)
   (restart-case
       (let* ((functions
@@ -419,7 +426,7 @@ Could also return :eof, :close, :error."
                                 (assoc :sec-websocket-key)
                                 (cdr)
                                 (str:concat <> +sec-key+)
-                                (sha1:sha1-base64))))))
+                                (sha1-base64))))))
               :external-format :utf-8)
              stream)
             (force-output stream)
