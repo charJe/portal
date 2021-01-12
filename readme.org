@@ -12,16 +12,16 @@ Resources are identified by their path in the URL.
 
 A simple echo server.
 #+BEGIN_SRC lisp
-  (pws:define-path-handler "/echo"
-    :connect (lambda (websocket)
-               (pws:send websocket "Welcome to echo server."))
+  (pws:define-resource "/echo"
+    :open (lambda (websocket)
+            (pws:send websocket "Welcome to echo server."))
     :message (lambda (websocket message)
                (sleep 1)
                (pws:send websocket message)
                (sleep 1)
                (pws:send websocket message)))
 #+END_SRC
-You can also define ~:disconnect~ function and a ~:error~ function in case something goes wrong in your other functions. You can't send any more messages after a disconnect has begun.
+You can also define ~:close~ function and a ~:error~ function in case something goes wrong in your other functions. You can't send any more messages after a close has begun.
 
 ** Start a Server
 #+BEGIN_SRC lisp
@@ -32,7 +32,7 @@ You can also define ~:disconnect~ function and a ~:error~ function in case somet
 Now connect to =ws://localhost:4433/echo= in a websocket tester and start echoing.
 You can add a ~:multi-thread~ argument to give each client its own thread.
 
-** Disconnect Clients
+** Close Clients
 At any point, you can close a client websocket.
 #+BEGIN_SRC lisp
   (pws:close websocket)
@@ -50,35 +50,35 @@ It is just a thread!
 These two methods are separate, You can both, neither, or any combination.
 
 *** Custom Handler Function
-When defining a resource path, you can pass a ~:error~ argument with a function that takes the websocket and the condition that occurred. Do whatever you want here. It is called when there is an error in your ~:connect~, ~:message~, or ~:disconnect~ function.
+When defining a resource path, you can pass a ~:error~ argument with a function that takes the websocket and the condition that occurred. Do whatever you want here. It is called when there is an error in your ~:open~, ~:message~, or ~:close~ function.
 
 *** Debugger
 There is a variable: ~pws:*debug-on-error*~; when it is non-nil, the debugger will be entered when there is a problem with one of your handler functions.
 it is bound to ~t~ by default.
 
 *** Example
-Here is another example, this time using the ~:error~ function sends the error over the websocket instead of entering the debugger, and the ~:disconnect~ just prints to the Lisp console.
+Here is another example, this time using the ~:error~ function sends the error over the websocket instead of entering the debugger, and the ~:close~ just prints to the Lisp console.
 
 #+BEGIN_SRC lisp
   ;; prevent entering debugger
   (setq pws:*debug-on-error* nil)
 
-  (pws:define-path-handler "/err"
-
-    :connect (lambda (socket)
-               (pws:send socket "Welcome to error server."))
-
+  (pws:define-resource "/err"
+  
+    :open (lambda (socket)
+            (pws:send socket "Welcome to error server."))
+  
     :message (lambda (socket message)
                ;; error because message is a string
                (pws:send socket (1+ message)))
-
+  
     :error (lambda (socket condition)
              ;; echo error to websocket
              (pws:send socket condition))
-
-    :disconnect (lambda (socket)
-                  (declare (ignore socket))
-                  (print "Socket leaving error server.")))
+  
+    :close (lambda (socket)
+             (declare (ignore socket))
+             (print "Socket leaving error server.")))
 
 #+END_SRC
 * Issues

@@ -28,14 +28,14 @@
 (use-package 'arrows)
 (defparameter global-socket nil)
 
-(pws:define-path-handler "/add1"
-  :connect (lambda (socket)
-             (pws:send socket "Welcome to add1 server."))
+(pws:define-resource "/add1"
+  :open (lambda (socket)
+          (pws:send socket "Welcome to add1 server."))
   :message (lambda (socket message)
              (pws:send socket
-                   (-> message
-                     (parse-integer :junk-allowed t)
-                     (1+)))))
+                       (-> message
+                         (parse-integer :junk-allowed t)
+                         (1+)))))
 
 (defun echo (websocket message)
   (setq global-socket websocket)
@@ -44,38 +44,38 @@
   (sleep 1)
   (pws:send websocket message))
 
-(pws:define-path-handler "/echo"
-  :connect (lambda (websocket)
-             (pws:send websocket "Welcome to echo server."))
+(pws:define-resource "/echo"
+  :open (lambda (websocket)
+          (pws:send websocket "Welcome to echo server."))
   :message #'echo
-  :disconnect (lambda (websocket)
-                (declare (ignore websocket))
-                (print 'leaving-echo)
-                (force-output)))
+  :close (lambda (websocket)
+           (declare (ignore websocket))
+           (print 'leaving-echo)
+           (force-output)))
 
-(pws:define-path-handler "/no"
-  :connect (lambda (socket)
-             (pws:close socket)))
+(pws:define-resource "/no"
+  :open (lambda (socket)
+          (pws:close socket)))
 
 ;; prevent entering debugger
 (setq pws:*debug-on-error* nil)
 
-(pws:define-path-handler "/err"
-
-  :connect (lambda (socket)
-             (pws:send socket "Welcome to error server."))
-
+(pws:define-resource "/err"
+  
+  :open (lambda (socket)
+          (pws:send socket "Welcome to error server."))
+  
   :message (lambda (socket message)
              ;; error because message is a string
              (pws:send socket (1+ message)))
-
+  
   :error (lambda (socket condition)
            ;; echo error to websocket
            (pws:send socket condition))
-
-  :disconnect (lambda (socket)
-                (declare (ignore socket))
-                (print "Socket leaving error server.")))
+  
+  :close (lambda (socket)
+           (declare (ignore socket))
+           (print "Socket leaving error server.")))
 
 (defparameter server
   (pws:server 4433))

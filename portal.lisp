@@ -28,35 +28,35 @@ set to the origin (www.example.com).")
   "When the first closing frame has been sent or received.")
 (defconstant +closed+ 3)
 
-(define-global-var -path-handlers- (list)
-  "Alist of path handler functions.
+(define-global-var -resource-handlers- (list)
+  "Alist of resource handler functions.
 Key: path, Value: list of handler functions")
 
-(defmacro define-path-handler
+(defmacro define-resource-handler
     (path &key
-            (connect '(lambda (websocket)
+            (open '(lambda (websocket)
                        (declare (ignore websocket))))
             (message '(lambda (websocket message)
                        (declare (ignore websocket message))))
-            (disconnect '(lambda (websocket)
+            (close '(lambda (websocket)
                           (declare (ignore websocket))))
             (error '(lambda (websocket condition)
                      (declare (ignore websocket condition)))))
   `(if (assoc (string-downcase ,path)
-             -path-handlers-)
+             -resource-handlers-)
       (setf (cdr (assoc (string-downcase ,path)
-                        -path-handlers-))
-            (list (quote ,connect)
+                        -resource-handlers-))
+            (list (quote ,open)
                   (quote ,message)
-                  (quote ,disconnect)
+                  (quote ,close)
                   (quote ,error)))
-      (setf -path-handlers-
+      (setf -resource-handlers-
             (acons (string-downcase ,path)
-                   (list (quote ,connect)
+                   (list (quote ,open)
                          (quote ,message)
-                         (quote ,disconnect)
+                         (quote ,close)
                          (quote ,error))
-                   -path-handlers-))))
+                   -resource-handlers-))))
 
 (defun starts-with (start list)
   (cond
@@ -64,24 +64,24 @@ Key: path, Value: list of handler functions")
     ((equal (first start) (first list))
      (starts-with (rest start) (rest list)))))
 
-(defun call-path-function (function-name websocket &rest arguments)
+(defun call-resource-function (function-name websocket &rest arguments)
   (restart-case
       (let* ((functions
                (-<>> websocket
                  (header)
                  (assoc :script)
                  (cdr)
-                 (assoc <> -path-handlers-
+                 (assoc <> -resource-handlers-
                         :test #'str:starts-with-p)
                  (cdr)))
              (function (elt functions
                             (case function-name
-                              (:connect 0)
+                              (:open 0)
                               (:message 1)
-                              (:disconnect 2)
+                              (:close 2)
                               (otherwise 3)))))
         (handler-case
-            ;; custom connect function
+            ;; custom open function
             (apply (eval function) websocket arguments)
           (t (condition)
             (funcall (eval (elt functions 3)) websocket condition)
@@ -95,7 +95,7 @@ Key: path, Value: list of handler functions")
       (continue))
     (retry ()
       :report "retry processing"
-      (apply #'call-path-function function-name websocket arguments))))
+      (apply #'call-resource-function function-name websocket arguments))))
 
 (defun read-until (string &optional (stream *standard-input*))
   (loop with test = (map 'list 'char-code (reverse string))
@@ -207,7 +207,7 @@ If nil, the second value will be the reason."
        (or (-<>> header
              (assoc :script)
              (cdr)
-             (assoc <> -path-handlers-
+             (assoc <> -resource-handlers-
                     :test #'str:starts-with-p))
            (values nil :script)))
     (t () (values nil :request))))
@@ -384,11 +384,11 @@ Could also return :eof, :close, :error."
     (return-from close))
   ;; send close frame
   (send-close-frame websocket)
-  ;; move to disconnecting state
+  ;; move to closing state
   (setf (slot-value websocket 'ready-state)
         +closing+)
   ;; run function
-  (call-path-function :disconnect websocket))
+  (call-resource-function :close websocket))
 
 (defun websocket-handler (stream)
   ;; connect
@@ -424,7 +424,7 @@ Could also return :eof, :close, :error."
              stream)
             (force-output stream)
             ;; custom connect function
-            (call-path-function :connect websocket)
+            (call-resource-function :open websocket)
             (setf (slot-value websocket 'ready-state)
                   +ready+)
             ;; messages
@@ -437,11 +437,11 @@ Could also return :eof, :close, :error."
                     (progn
                       ;; close socket
                       (cl:close (socket-stream websocket))
-                      ;; move to disconnecting state
+                      ;; move to closing state
                       (setf (slot-value websocket 'ready-state)
                             +closing+)
                       ;; run function
-                      (call-path-function :disconnect websocket))
+                      (call-resource-function :close websocket))
                   else if (eq payload :error) do
                     ;; send close frame
                     ;; run function
@@ -459,7 +459,7 @@ Could also return :eof, :close, :error."
                   while (not (keywordp payload))
                   ;; call custom function
                   if payload do
-                    (call-path-function :message websocket payload))
+                    (call-resource-function :message websocket payload))
             ;; move to closed state
             (setf (slot-value websocket 'ready-state)
                   +closed+))
