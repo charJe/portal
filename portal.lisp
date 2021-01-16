@@ -6,12 +6,15 @@ set to the origin (www.example.com).")
 
 (defvar *debug-on-error* t)
 
-(defconstant +crlf+
-  (coerce (list (code-char 13) (code-char 10)) 'string))
-(defconstant +sec-key+
-  "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
-(defconstant +http-version+
-  "HTTP/1.1")
+(define-constant +crlf+
+    (coerce (list (code-char 13) (code-char 10)) 'string)
+  :test #'string=)
+(define-constant +sec-key+
+  "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+  :test #'string=)
+(define-constant +http-version+
+  "HTTP/1.1"
+  :test #'string=)
 
 ;; frame control codes
 (defconstant +continuation+ #x0)

@@ -9,6 +9,7 @@
   :version "0"
   :serial t
   :depends-on (#:usocket-server
+               #:alexandria
                #:arrows
                #:global-vars
                #:str

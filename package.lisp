@@ -2,6 +2,8 @@
   (:nicknames pws)
   (:use #:cl)
   (:shadow close)
+  (:import-from #:alexandria
+                define-constant)
   (:import-from #:usocket
                 socket
                 socket-server
