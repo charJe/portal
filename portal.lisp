@@ -100,13 +100,14 @@ Key: path, Value: list of handler functions")
                               (:message 1)
                               (:close 2)
                               (otherwise 3)))))
-        (handler-case
-            ;; custom open function
-            (apply (eval function) websocket arguments)
-          (t (condition)
-            (funcall (eval (elt functions 3)) websocket condition)
-            (when *debug-on-error*
-              (error condition)))))
+        (handler-bind
+            ((error
+               (lambda (condition)
+                 (funcall (eval (elt functions 3)) websocket condition)
+                 (unless *debug-on-error*
+                   (continue condition)))))
+          ;; custom open function
+          (apply (eval function) websocket arguments)))
     (drop-client ()
       :report "close the client websocket"
       (close websocket))
