@@ -2,9 +2,10 @@
 Portable websockets for Common Lisp using [[https://github.com/usocket/usocket][usocket]].
 
 * Install
-1. Download to =quicklisp/local-projects=.
-2. ~(ql:quickload 'portal)~
-
+Install with [[https://www.quicklisp.org/beta/][quicklisp]].
+#+BEGIN_SRC lisp
+  (ql:quickload 'portal)
+#+END_SRC
 * Use
 
 ** Define a Resource
