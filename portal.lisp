@@ -199,7 +199,7 @@ If nil, the second value will be the reason."
              (cdr)
              (str:split "/")
              (second)
-             (read-from-string)
+             (parse-float)
              (<= 1.1))
            (values nil :version))
        ;; missing sec-websocket-key

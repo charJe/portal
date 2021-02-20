@@ -15,6 +15,7 @@
                #:str
                #:ironclad
                #:cl-base64
-               #:flexi-streams)
+               #:flexi-streams
+               #:read-float)
   :components ((:file "package")
                (:file "portal" :depends-on ("package"))))
