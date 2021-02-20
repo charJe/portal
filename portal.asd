@@ -6,7 +6,7 @@
   :description "Portable websockets."
   :author "Charles Jackson <charles.b.jackson@protonmail.com>"
   :license "LLGPL"
-  :version "0"
+  :version "1"
   :serial t
   :depends-on (#:usocket-server
                #:alexandria
