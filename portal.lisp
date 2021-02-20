@@ -454,7 +454,16 @@ Could also return :eof, :close, :error."
                   ;; read new payload
                   for payload = (read-frame websocket)
                   ;; close condition
-                  if (member payload (list :eof :error)) do
+                  if (eq payload :eof) do
+                    (progn
+                      ;; close socket
+                      (cl:close (socket-stream websocket))
+                      ;; move to closing state
+                      (setf (slot-value websocket 'ready-state)
+                            +closing+)
+                      ;; run function
+                      (call-resource-function :close websocket))
+                  else if (eq payload :error) do
                     ;; send close frame
                     ;; run function
                     (close websocket)
