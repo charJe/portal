@@ -16,6 +16,6 @@
                #:ironclad
                #:cl-base64
                #:flexi-streams
-               #:read-float)
+               #:parse-float)
   :components ((:file "package")
                (:file "portal" :depends-on ("package"))))

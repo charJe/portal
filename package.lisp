@@ -13,8 +13,8 @@
   (:import-from #:global-vars
                 define-global-var
                 define-global-parameter)
-  (:import-from #:read-float
-                read-float)
+  (:import-from #:parse-float
+                parse-float)
   (:export
    define-resource
    websocket
