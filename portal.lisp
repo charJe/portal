@@ -210,7 +210,7 @@ If nil, the second value will be the reason."
            (or (->> header
                  (assoc :origin)
                  (cdr)
-                 (string= origin))
+                 (string= -origin-))
                (values nil :origin))
            t)
        ;; trying to upgrade
