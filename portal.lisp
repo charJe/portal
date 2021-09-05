@@ -35,41 +35,25 @@ set to the origin (www.example.com).")
   "Alist of resource handler functions.
 Key: path, Value: list of handler functions")
 
-(defmacro define-resource
+(defun define-resource
     (path &key
-            (open '(lambda (websocket)
-                       (declare (ignore websocket))))
-            (message '(lambda (websocket message)
+            (open (lambda (websocket)
+                    (declare (ignore websocket))))
+            (message (lambda (websocket message)
                        (declare (ignore websocket message))))
-            (close '(lambda (websocket)
-                          (declare (ignore websocket))))
-            (error '(lambda (websocket condition)
+            (close (lambda (websocket)
+                     (declare (ignore websocket))))
+            (error (lambda (websocket condition)
                      (declare (ignore websocket condition)))))
-  `(let* ((path ,path)
-          (open (quote ,open))
-          (message (quote ,message))
-          (close (quote ,close))
-          (error (quote ,error))
-          (funlist (list (if (eq 'lambda (first open))
-                             (eval open)
-                             open)
-                         (if (eq 'lambda (first message))
-                             (eval message)
-                             message)
-                         (if (eq 'lambda (first close))
-                             (eval close)
-                             close)
-                         (if (eq 'lambda (first error))
-                             (eval error)
-                             error)))
-          (resource (assoc (string-downcase path) -resource-handlers-
-                           :test #'string=)))
-     (if resource
-         (setf (cdr resource) funlist)
-         (setf -resource-handlers-
-               (acons (string-downcase path)
-                      funlist
-                      -resource-handlers-)))))
+  (let ((funlist (vector open message close error))
+        (resource (assoc (string-downcase path) -resource-handlers-
+                         :test #'string=)))
+    (if resource
+        (setf (cdr resource) funlist)
+        (setf -resource-handlers-
+              (acons (string-downcase path)
+                     funlist
+                     -resource-handlers-)))))
 
 (defun starts-with (start list)
   (cond
