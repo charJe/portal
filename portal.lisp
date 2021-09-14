@@ -4,6 +4,7 @@
   "If Cross-Origin-Request-Sharing is disallowed,
 set to the origin (www.example.com).")
 
+(defvar *catch-errors* t)
 (defvar *debug-on-error* t)
 
 (define-constant +crlf+
@@ -105,8 +106,7 @@ Key: path, Value: list of handler functions")
 (defun read-until (string &optional (stream *standard-input*))
   (loop with test = (map 'list 'char-code (reverse string))
         with result = (list)
-        for byte = (handler-case (read-byte stream nil nil)
-                     (t () nil))
+        for byte = (read-byte stream nil nil)
         if (null byte)
           return (when result
                    (map 'string #'code-char (reverse result)))
@@ -484,14 +484,21 @@ Could also return :eof, :close, :error."
             (force-output stream))))))
 
 (defun server (&optional (port 4433) multi-thread)
-  (socket-server *wildcard-host* port
-                 (lambda (stream)
-                   (websocket-handler stream))
-                 nil
-                 :in-new-thread t
-                 :multi-threading multi-thread
-                 :element-type '(unsigned-byte 8)
-                 :name "Websocket Server"))
+  (socket-server
+   *wildcard-host* port
+   (lambda (stream)
+     (block nil
+       (handler-bind
+           ((error
+              (lambda (condition)
+                (format *error-output* "~A" condition)
+                (when *catch-errors* (return)))))
+         (websocket-handler stream))))
+   nil
+   :in-new-thread t
+   :multi-threading multi-thread
+   :element-type '(unsigned-byte 8)
+   :name "Websocket Server"))
 
 (defun server-close (websocket-server)
   (bt:destroy-thread websocket-server))
