@@ -441,7 +441,7 @@ Could also return :eof, :close, :error."
                   if (eq payload :eof) do
                     (progn
                       ;; close socket
-                      (cl:close (socket-stream websocket))
+                      (cl:close (socket-stream websocket) :abort t)
                       ;; move to closing state
                       (setf (slot-value websocket 'ready-state)
                             +closing+)
@@ -455,7 +455,7 @@ Could also return :eof, :close, :error."
                     (if (= (ready-state websocket)
                            +closing+)
                         ;; close socket
-                        (cl:close (socket-stream websocket))
+                        (cl:close (socket-stream websocket) :abort t)
                         ;;; else
                         ;; send close frame
                         ;; run function
