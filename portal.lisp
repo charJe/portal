@@ -4,8 +4,7 @@
   "If Cross-Origin-Request-Sharing is disallowed,
 set to the origin (www.example.com).")
 
-(defvar *catch-errors* t)
-(defvar *debug-on-error* t)
+(defvar *debug-on-error* nil)
 
 (define-constant +crlf+
     (coerce (list (code-char 13) (code-char 10)) 'string)
@@ -491,8 +490,8 @@ Could also return :eof, :close, :error."
        (handler-bind
            ((error
               (lambda (condition)
-                (format *error-output* "~A" condition)
-                (when *catch-errors* (return)))))
+                (format *error-output* "~A~%" condition)
+                (unless *debug-on-error* (return)))))
          (websocket-handler stream))))
    nil
    :in-new-thread t
