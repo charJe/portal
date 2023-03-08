@@ -6,16 +6,20 @@
   :license "LLGPL"
   :version "1.2"
   :serial t
-  :depends-on
-  (#:usocket-server
-   #:alexandria
-   #:arrows
-   #:global-vars
-   #:str
-   #:ironclad
-   #:cl-base64
-   #:flexi-streams
-   #:parse-float)
-  :components
-  ((:file "package")
-   (:file "portal")))
+  :depends-on (#:usocket-server
+               #:alexandria
+               #:arrows
+               #:global-vars
+               #:str
+               #:fast-http
+               #:cl-base64
+               #:ironclad
+               #:babel
+               #:nibbles
+               #:parse-float)
+  :pathname "src"
+  :components ((:file "package")
+               (:file "helpers")
+               (:file "conditions")
+               (:file "http")
+               (:file "portal")))
