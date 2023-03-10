@@ -22,3 +22,17 @@
           (format t "~&Got: ~A~%" message)))
 (wsd:send *client* (make-string 127 :initial-element #\h))
 (wsd:close-connection *client*)
+
+
+;;the interface
+
+
+
+(defclass my-server (server)
+  ()
+  (:default-initargs :port 5006
+                     :paths '(#P"/echo" #P"/foo")))
+
+(defmethod on-open ((path (eql #P"/echo")) (server my-server) websocket)
+  "REE")
+

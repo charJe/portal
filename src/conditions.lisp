@@ -27,6 +27,17 @@
     :accessor key
     :initarg :key
     :type keyword)))
+
+(define-condition excess-length (portal-condition)
+  ((fun
+    :accessor fun
+    :initarg :fun)
+   (max
+    :accessor max-len 
+    :initarg :max)))
+    
+    
+
    
 (define-condition frame-condition (portal-condition)
   ())
@@ -47,5 +58,26 @@
     :accessor frame
     :initarg :frame)))
 
+
+(define-condition server-condition (portal-condition)
+  ())
+
+(define-condition no-known-server (server-condition)
+  ((key
+    :accessor key
+    :initarg :key))
+  (:report
+   (lambda (obj stream)
+     (format stream "No known server by key: ~A." (key obj)))))
+
+(define-condition server-already-exists-by-key (server-condition)
+  ((key
+    :accessor key
+    :initarg :key))
+  (:report
+   (lambda (obj stream)
+     (format stream "A server by that key already exists: ~A." (key obj)))))
+
+  
 
 

@@ -2,7 +2,7 @@
 
 (defclass websocket ()
   ((header
-    :reader header
+    :accessor header
     :initarg :header
     :type fast-http:http-request
     :documentation "HTTP header for websocket upgrade.")
@@ -10,6 +10,11 @@
     :accessor socket-stream
     :initarg :stream
     :type stream)
+   (path
+    :accessor path
+    :initarg :path
+    :type pathname
+    :documentation "The resource from header as a pathname")
    (stash
     :accessor stash
     :initform ()
@@ -149,3 +154,37 @@
 (defclass reserved-non-control-frame (reserved-frame)
   ()
   (:documentation "The reserved control frames between #x3-7"))
+
+(deftype pathname-list () `(satisfies pathname-list-p))
+
+(defun pathname-list-p (list)
+  (every #'pathnamep list))
+
+(defclass server ()
+  ((websocket
+    :accessor websocket
+    :initarg :websocket
+    :type websocket
+    :documentation "An instance of websocket.")
+   (port
+    :accessor port
+    :initarg :port
+    :type (unsigned-byte 16)
+    :documentation "The listening port number.")
+   (thread
+    :accessor thread
+    :initarg :thread
+    :type bt:thread
+    :documentation "The tcp server.")
+   (paths
+    :accessor paths
+    :initarg :paths
+    :type pathname-list
+    :documentation "List of pathnames")
+   (origins 
+    :accessor origins 
+    :initarg :origins 
+    :initform ()
+    :type list
+    :documentation "A list of acceptable origins for websockets."))
+  (:documentation "A listening websocket server."))

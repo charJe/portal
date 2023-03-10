@@ -22,5 +22,7 @@
                (:file "helpers")
                (:file "conditions")
                (:file "classes")
+               (:file "resource")
                (:file "http")
-               (:file "portal")))
+               (:file "portal")
+

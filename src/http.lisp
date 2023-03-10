@@ -83,6 +83,9 @@
 (defun origin (http)
   (gethash "origin" (http-headers http)))
 
+(defun resource (http)
+  (pathname (fast-http:http-resource http)))
+
 
 
 
