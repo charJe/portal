@@ -56,3 +56,18 @@ This file contains helpers.
       (error 'read-failure :key key))
     val))
   
+
+(defparameter *log* t)
+
+(defmacro logging (control-string &rest arguments)
+  `(when *log*
+     (format *debug-io* ,control-string ,@arguments)))
+
+(defun force-write (sequence stream &key keys &allow-other-keys)
+  (apply #'write-sequence sequence stream keys)
+  (force-output stream))
+
+(defmacro while ((condition) &body body)
+  `(loop :while ,condition
+         :do (locally ,@body)))
+  

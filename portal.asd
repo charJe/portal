@@ -21,5 +21,6 @@
   :components ((:file "package")
                (:file "helpers")
                (:file "conditions")
+               (:file "classes")
                (:file "http")
                (:file "portal")))

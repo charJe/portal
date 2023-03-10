@@ -1,7 +1,7 @@
 (ql:quickload :websocket-driver-client)
 
-(defparameter *client* (wsd:make-client "ws://localhost:5004/echo"))
-(defparameter *server* (pws:server 5004))
+(defparameter *client* (wsd:make-client "ws://localhost:5005/echo"))
+(defparameter *server* (pws:server 5005))
 
 (pws:server-close *server*)
 
@@ -9,6 +9,7 @@
   :open (lambda (websocket)
           (pws:send websocket "Welcome to echo server."))
   :message (lambda (websocket message)
+             (logging "Websocket: ~S~%" websocket)
              (sleep 1)
              (pws:send websocket (format nil "~A from client" message))))
 

@@ -10,11 +10,8 @@
     :accessor socket-stream
     :initarg :stream
     :type stream)
-   (fragment-opcode
-    :reader opcode
-    :documentation  "Store the type of frame we are currently on.")
    (stash
-    :reader stash
+    :accessor stash
     :initform ()
     :type list
     :documentation "Store the message content before all fames have arrived.")))
@@ -55,6 +52,10 @@
   ((data
     :type string)))
 
+(defmethod print-object ((data data) stream)
+  (print-unreadable-object (data stream :type t)
+    (format stream "Length: ~A"
+            (length (data data)))))
 
 (defclass frame ()
   ((op
@@ -72,8 +73,15 @@
 
 (defmethod print-object ((frame frame) stream)
   (print-unreadable-object (frame stream :type t)
-    (format stream "op: #x~x"
-            (slot-value frame 'op))))
+    (format stream "op: #x~x~%Mask: ~A.~%Length: ~D."
+            (slot-value frame 'op)
+            (if (slot-boundp frame 'mask)
+                (mask frame)
+                "NOT SET")
+            (if (slot-boundp frame 'length)
+                (len frame)
+                0))))
+
 
 ;; frame control codes
 (defconstant +continuation+ #x0)
@@ -141,11 +149,3 @@
 (defclass reserved-non-control-frame (reserved-frame)
   ()
   (:documentation "The reserved control frames between #x3-7"))
-
-
-(defclass state ()
-  ((websocket
-
-
-(defclass eof ()
-  ()
