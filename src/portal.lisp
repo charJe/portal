@@ -21,12 +21,7 @@
 (defconstant +ping+ #x9)
 (defconstant +pong+ #xA)
 
-;; socket ready state
-(defconstant +connecting+ 0)
-(defconstant +ready+ 1)
-(defconstant +closing+ 2
-  "When the first closing frame has been sent or received.")
-(defconstant +closed+ 3)
+
 
 (defvar *resource-handlers* ()
   "Alist of resource handler functions. Key: path, Value: list of handler functions")
@@ -121,42 +116,26 @@
            t)
         (t () (c :request))))))
 
-(defclass websocket ()
-  ((header
-    :reader header
-    :initarg :header
-    :type fast-http:http-request
-    :documentation "HTTP header for websocket upgrade.")
-   (stream
-    :accessor socket-stream
-    :initarg :stream
-    :type stream)
-   (ready-state
-    :reader ready-state
-    :initform 0
-    :type number)
-   (fragment-opcode
-    :reader opcode
-    :documentation  "Store the type of frame we are currently on.")
-   (stash
-    :reader stash
-    :initform ()
-    :type list
-    :documentation "Store the message content before all fames have arrived.")))
 
-(defmethod append-stash ((websocket websocket) sequence)
+(defmethod append-stash ((websocket websocket) (data data))
   (with-slots (stash)
       websocket
-    (push sequence stash)))
+    (push data stash)))
+
+(defgeneric data-final-type (data)
+  (:method ((data text-data))
+    'string)
+  (:method ((data binary-data))
+    'vector))
 
 (defmethod get-stash ((websocket websocket))
-  (with-slots (stash fragment-opcode) websocket
-    (apply #'concatenate
-           (cond
-             ((= fragment-opcode +text+) 'string)
-             ((= fragment-opcode +binary+) 'vector))
-           (reverse stash))))
-
+  (with-accessors ((stash stash))
+      websocket
+    (apply #'concatenate (data-final-type (first stash))
+           (let ((data ()))
+             (dolist (s stash data)
+               (push (data s) data))))))
+                     
 (defmethod clear-stash ((websocket websocket))
   (with-slots (stash) websocket
     (setf stash ())))
@@ -195,69 +174,91 @@
 (defun read-mask (stream)
   (let ((mask (make-array 4 :element-type '(unsigned-byte 8))))
     (dotimes (index 4 mask)
-      (setf (aref mask index) (read-byte stream nil)))))
+      (setf (aref mask index) (eread-byte stream :read-mask)))))
      
 (defun read-payload (length mask stream)
   (let ((payload (make-array length :element-type '(unsigned-byte 8))))
     (dotimes (index length payload)
       (setf (aref payload index)
-            (logxor (or (read-byte stream nil)
-                        (return-from read-payload :eof));;I am gonna replace these
-                    ;;with conditions
+            (logxor (eread-byte stream :read-payload)
                     (elt mask (mod index 4)))))))
 
+(defgeneric handle-frame (frame websocket)
+  (:documentation "Attempt to correctly handle FRAME for WEBSOCKET.")
+  (:method (frame websocket)
+    (error 'unsupported-frame :frame frame)))
+
+(defgeneric close-frame-p (frame)
+  (:method ((c close))
+    t)
+  (:method (c)
+    nil))
+
+(defmethod handle-frame ((frame ping) websocket)
+  (with-accessors ((len len)
+                   (mask mask))
+      frame
+    (send-pong websocket (if (zerop len)
+                             (make-array 0 :element-type '(unsigned-byte 8))
+                             (read-payload len mask (socket-stream websocket))))))
+
+(defmethod handle-frame ((frame pong) websocket)
+  (with-accessors ((len len)
+                   (mask mask))
+      frame
+    (unless (zerop len)
+      ;;no payload if its 0
+      (read-payload len mask (socket-stream websocket)))))
+      
+(defmethod handle-frame ((frame text) websocket)
+  (with-accessors ((len len)
+                   (mask mask))
+      frame
+    (let* ((payload (read-payload len mask (socket-stream websocket)))
+           (data (handler-case;;need new condition here
+           ;; payload must be valid utf-8
+                     (octets-to-string payload)
+                   (serious-condition ()
+                     (error 'not-utf8))))
+           (text (make-instance 'text-data :data data)))
+      (append-stash websocket text))))
+
+(defmethod handle-frame ((frame binary) websocket)
+  (with-accessors ((len len)
+                   (mask mask))
+      frame
+    (let* ((payload (read-payload len mask (socket-stream websocket)))
+           (binary (make-instance 'binary-data :data payload)))
+      (append-stash websocket binary))))
+       
 (defmethod read-frame ((websocket websocket))
   #.(ds "Read a from from the stream of WEBSOCKET. ~
          When the frame is the last one in a series, return the complete message. ~
          Could also return :eof, :close, :error.")
   (let* ((stream (socket-stream websocket))
-         (b0 (read-byte stream nil :eof)))
-    (when (eq :eof b0)
-      (return-from read-frame :eof))
-    (let* ((b1 (or (read-byte stream nil)
-                   (return-from read-frame :eof)))
-           (fin (< 0 (logand b0 #b10000000)))
-           (opcode (let ((opcode (logand b0 #b1111)))
-                     (if (= opcode +continuation+)
-                         (opcode websocket)
-                         opcode)))
-           (mask (< 0 (logand b1 #b10000000)))
-           (len (logand b1 #b1111111)))
-      ;; A server MUST close the connection upon receiving a frame with
-      (unless mask
-        (return-from read-frame :error))
+         (b0 (eread-byte stream :eof))
+         (b1 (eread-byte stream :eof))                
+         (fin (< 0 (logand b0 #b10000000)))
+         (opcode (let ((opcode (logand b0 #b1111)))
+                   (if (= opcode +continuation+)
+                       (opcode websocket)
+                       opcode)))
+         (maskbit (or (< 0 (logand b1 #b10000000))
+                   (error 'bad-mask)))
+         (len (logand b1 #b1111111))
+         (frame (make-frame opcode)))
+    (declare (ignore maskbit))
       ;; client close frame
-      (when (= opcode +close+)
-        (return-from read-frame :close))
+    (when (close-frame-p frame)
+      (return-from read-frame frame))
       ;; read length
-      (let* ((len (read-length len stream))
-             ;;read mask
-             (mask (read-mask stream))
-             (payload (read-payload len mask stream)))
-        ;; read payload
-        (cond
-          ((= opcode +ping+)
-           (send-pong websocket payload))
-          ;; begining a text frame
-          ((= opcode +text+)
-           (setf (slot-value websocket 'fragment-opcode) opcode)
-           (append-stash
-            websocket
-            (handler-case
-                ;; payload must be valid utf-8
-                (octets-to-string payload)
-              (t () (return-from read-frame :error)))))
-          ;; begining a binary frame
-          ((= opcode +binary+)
-           (setf (slot-value websocket 'fragment-opcode) opcode)
-           (append-stash websocket payload))
-          (t
-           (return-from read-frame :error)))
-        ;; return message if all frames have been processed
-        (when fin
-          (prog1 (get-stash websocket)
-            (clear-stash websocket)))))))
-
+    (let* ((len (read-length len stream))
+           ;;read mask
+           (mask (read-mask stream)))        
+      (setf (len frame) len
+            (mask frame) mask)        
+      (handle-frame frame websocket)
+      (values frame fin))))
 
 (defun write-length (stream length)
   (let ((val (+ #b00000000                      ;mask
@@ -314,16 +315,16 @@
    (socket-stream websocket))
   (force-output (socket-stream websocket)))
 
+(defmethod close ((websocket closed) &rest abort)
+  (declare (ignore abort))
+  nil)
+
 (defmethod close ((websocket websocket) &rest abort)
   (declare (ignore abort))
-  (when (= (ready-state websocket)
-           +closed+)
-    (return-from close))
   ;; send close frame
   (send-close-frame websocket)
   ;; move to closing state
-  (setf (slot-value websocket 'ready-state)
-        +closing+)
+  (change-class websocket 'closing)
   ;; run function
   (call-resource-function :close websocket))
 
@@ -334,14 +335,37 @@
   (write-sequence response stream)
   (force-output stream))
 
+(defgeneric ready-or-closing-p (websocket)
+  (:method ((r ready))
+    t)
+  (:method ((c closing))
+    t)
+  (:method (n)
+    nil))
+
+
+(defmethod handle-frame ((frame portal-condition) websocket)
+  (cl:close (socket-stream websocket))  
+  ;; close socket
+  ;;spec says that we should try to read and disgard any bytes.. but says
+  ;;MAY just yeet the connectionn
+  (cl:close (socket-stream websocket) :abort t)
+  ;; move to closing state
+  (change-class websocket 'closing)
+  ;; run function
+  (call-resource-function :close websocket))
+
+(defmethod handle-frame ((frame close) (websocket closing))
+  (close websocket)
+  (cl:close (socket-stream websocket) :abort t))
+
+(defmethod handle-frame ((frame frame) websocket)
+  (call-resource-function :message websocket frame))
+  
 (defun handle-upgrade (stream request)
-  (let ((websocket (make-instance
-                    'websocket
-                    :header request
-                    :stream stream)))
-    ;; start connecting
-    (setf (slot-value websocket 'ready-state)
-          +connecting+)
+  (let ((websocket (make-instance 'connecting
+                                  :header request
+                                  :stream stream)))
     ;; send accept response header
     (write-response stream (construct-http-response      
                             (cons :version +http-version+)
@@ -354,45 +378,19 @@
                                                            +sec-key+)))))
     ;; custom connect function
     (call-resource-function :open websocket)
-    (setf (slot-value websocket 'ready-state)
-          +ready+)
+    (change-class websocket 'ready)
     ;; messages
-    (loop while (member (ready-state websocket)
-                        (list +ready+ +closing+))
+    (loop :while (ready-or-closing-p websocket)
           ;; read new payload
-          for payload = (read-frame websocket)
-          ;; close condition
-          if (eq payload :eof) do
-            (progn
-              ;; close socket
-              (cl:close (socket-stream websocket) :abort t)
-              ;; move to closing state
-              (setf (slot-value websocket 'ready-state)
-                    +closing+)
-              ;; run function
-              (call-resource-function :close websocket))
-          else if (eq payload :error) do
-            ;; send close frame
-            ;; run function
-            (close websocket)
-          else if (eq payload :close) do
-            (if (= (ready-state websocket)
-                   +closing+)
-                ;; close socket
-                (cl:close (socket-stream websocket) :abort t)
-                        ;;; else
-                ;; send close frame
-                ;; run function
-                (close websocket))
-            ;; exit if we closed
-          while (not (keywordp payload))
-          ;; call custom function
-          if payload do
-            (call-resource-function :message websocket payload))
+          :for frame := (handler-case
+                            (multiple-value-bind (frame &optional fin)
+                                (read-frame websocket))
+                          (portal-condition (c)
+                            c))
+          :do (handle-frame frame websocket))
+    (change-class websocket 'closed)))
     ;; move to closed state
-    (setf (slot-value websocket 'ready-state)
-          +closed+)))
-
+            
 (defun handle-cannot-upgrade (stream reason)
   (write-response stream (construct-http-response
                           (cons :version +http-version+)

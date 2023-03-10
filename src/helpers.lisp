@@ -5,6 +5,9 @@ This file contains helpers.
 
 ||#
 
+(define-constant +crlf+
+    (coerce (list (code-char 13) (code-char 10)) 'string)
+  :test #'string=)
 
 (defmacro ds (control-string &rest arguments)
   `(format nil ,control-string ,@arguments))
@@ -44,4 +47,12 @@ This file contains helpers.
 
 (defun string-to-octets (string)
   (babel:string-to-octets string))
+
+(defparameter *noval* :noval)
+
+(defun eread-byte (stream key)
+  (let ((val (read-byte stream nil *noval*)))
+    (when (eq val *noval*)
+      (error 'read-failure :key key))
+    val))
   
