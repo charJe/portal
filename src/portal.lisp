@@ -387,11 +387,11 @@
                    (header header))
       websocket       
     (let* ((request (read-headers socket-stream)))
-      (setf header websocket)
+      (setf header request)
       (handler-case (progn (check-can-upgrade server request)
                            (setf (path websocket)
                                  (pathname (resource (header websocket))))
-                           (handle-upgrade websocket))
+                           (handle-upgrade server))
         (upgrade-problem (c)
           ;; headers that can't upgrade
           (handle-cannot-upgrade socket-stream (string-downcase (key c))))))))

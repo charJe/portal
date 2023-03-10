@@ -1,6 +1,6 @@
 (ql:quickload :websocket-driver-client)
 
-(defparameter *client* (wsd:make-client "ws://localhost:5005/echo"))
+(defparameter *client* (wsd:make-client "ws://localhost:5006/echo"))
 (defparameter *server* (pws:server 5005))
 
 (pws:server-close *server*)
@@ -20,7 +20,7 @@
 (wsd:on :message *client*
         (lambda (message)
           (format t "~&Got: ~A~%" message)))
-(wsd:send *client* (make-string 127 :initial-element #\h))
+(wsd:send *client* (make-string 299 :initial-element #\h))
 (wsd:close-connection *client*)
 
 
@@ -34,5 +34,12 @@
                      :paths '(#P"/echo" #P"/foo")))
 
 (defmethod on-open ((path (eql #P"/echo")) (server my-server) websocket)
-  "REE")
+  (format *debug-io* "Openin init."))
+
+(defmethod on-message ((path (eql #P"/echo")) (server my-server) websocket message)
+  (send websocket (format nil "~A from client" message)))
+
+(defparameter *test-server* (new-server 'my-server :test))
+
+
 

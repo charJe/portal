@@ -8,10 +8,10 @@ multiple listening websockets.
 (defvar *servers* (make-hash-table :test #'eq)
   "Key -> server mapping for storing servers.")
 
-(defun new-server (class key port paths &key (origins nil))
+(defun new-server (class key)
   "Make a new server under KEY that is a subclass of 'server. Listens on PORT."
   (restart-case
-      (when (gethash key *server*)
+      (when (gethash key *servers*)
         (error 'server-already-exists-by-key
                :key key))
     (continue ()
@@ -19,22 +19,20 @@ multiple listening websockets.
       nil)
     (stop-other ()
       :report "Stop server by that name?"
-      (stop-server key))
+      (stop-server key)
+      (remhash key *servers*))
     (quit ()
       :report "Quit?"
       (return-from new-server nil)))
   (setf (gethash key *servers*)
-        (make-instance class
-                       :origins origins
-                       :paths paths
-                       :websocket (make-instance 'websocket)
-                       :port port)))
+        (make-instance class :websocket (make-instance 'websocket))))
+
 
 (defun get-server (key)
-  (or (gethash key *server*)
+  (or (gethash key *servers*)
       (error 'no-known-server :key key)))
                          
-(defun server (websocket &key (port 4433) (multi-thread nil))
+(defun server (server websocket &key (port 4433) (multi-thread nil))
   (socket-server *wildcard-host* port
                  (lambda (stream)
                    (block :bail
@@ -44,17 +42,16 @@ multiple listening websockets.
                               (format *error-output* "~A~%" condition)
                               (unless *debug-on-error* (return-from :bail)))))
                        (setf (socket-stream websocket) stream)
-                       (websocket-handler websocket))))
+                       (websocket-handler server websocket))))
     nil
     :in-new-thread t
     :multi-threading multi-thread
     :element-type '(unsigned-byte 8)
     :name (format nil "Websocket Server port: ~D" port)))
 
-(defun server-close (websocket-server)
-  (when (bt:thread-alive-p websocket-server)
-    (logging "Stopping websocket-server.")
-    (bt:destroy-thread websocket-server)))
+(defun runningp (server)
+  (and (slot-boundp server 'thread)
+       (bt:thread-alive-p (slot-value server 'thread))))
 
 (defun start-server (key &key (multi-thread nil))
   (let ((server (get-server key)))
@@ -62,16 +59,15 @@ multiple listening websockets.
                      (websocket websocket)
                      (port port))
         server
-      (unless (bt:thread-alive-p thread)
+      (unless (runningp server)
         (setf thread
-              (server websocket :port port
+              (server server websocket :port port
                                 :multi-thread multi-thread))))))
 
 (defun stop-server (key)
   (let ((server (get-server key)))
-    (with-accessors ((thread thread))
-        server
-      (server-close thread))))
+    (when (runningp server)
+      (bt:destroy-thread (thread server)))))
       
 
         
