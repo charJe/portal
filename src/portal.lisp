@@ -69,13 +69,30 @@
         (serious-condition ()
           (c :request)))))))
 
+(defgeneric add-to-stash (stash data)
+  (:method ((stash stash) (data data))
+    (push data (stash stash)))
+  (:method ((stash capped-stash) (data data))
+    (with-accessors ((len len)
+                     (cap cap)
+                     (stash stash))
+        stash 
+      (let ((dlen (length (data data))))
+        (when (< cap (+ len dlen))
+          (logging "Stash exceeded.~%")
+          (error 'stash-exceeded
+                 :stash stash))
+        (incf len dlen)
+        (call-next-method)))))
+
+      
 (defmethod append-stash ((websocket websocket) (data data))
   (with-accessors ((stash stash))
       websocket
     (logging "Adding ~A of length ~D to stash.~%"
              (class-of data)
              (length (data data)))
-    (push data stash)))
+    (add-to-stash stash data)))
 
 (defgeneric data-final-type (data)
   (:method ((data text-data))
@@ -83,18 +100,28 @@
   (:method ((data binary-data))
     'vector))
 
-(defmethod get-stash ((websocket websocket))
+(defmethod get-stash ((websocket websocket))  
   (with-accessors ((stash stash))
       websocket
-    (apply #'concatenate (data-final-type (first stash))
-           (let ((data ()))
-             (dolist (s stash data)
-               (push (data s) data))))))
+    (with-accessors ((stash stash))
+        stash 
+      (apply #'concatenate (data-final-type (first stash))
+             (let ((data ()))
+               (dolist (s stash data)
+                 (push (data s) data)))))))
                      
+(defgeneric reset-stash (stash)
+  (:documentation "Reset stash back to its original state.")
+  (:method ((stash stash))
+    (setf (stash stash) ()))
+  (:method ((stash capped-stash))
+    (setf (len stash) 0)
+    (call-next-method)))
+
 (defmethod clear-stash ((websocket websocket))
   (with-accessors ((stash stash))
       websocket
-    (setf stash ())))
+    (reset-stash stash)))
 
 (defmethod send-pong ((websocket websocket) message)
   (declare (type (array (unsigned-byte 8)) message))

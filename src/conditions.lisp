@@ -60,6 +60,11 @@
     :accessor frame
     :initarg :frame)))
 
+(define-condition stash-exceeded (frame-condition)
+  ((stash
+    :accessor stash
+    :initarg :stash
+    :type stash)))
 
 (define-condition server-condition (portal-condition)
   ())

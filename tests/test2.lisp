@@ -1,12 +1,12 @@
 (ql:quickload :websocket-driver-client)
 
-(defparameter *client* (wsd:make-client "ws://localhost:5006/echo"))
+(defparameter *client* (wsd:make-client "ws://localhost:5007/echo"))
 
 (wsd:start-connection *client*)
 (wsd:on :message *client*
         (lambda (message)
           (format t "~&Got: ~A~%" message)))
-(wsd:send *client* (make-array 5 :element-type '(unsigned-byte 8) :initial-element 1))
+(wsd:send *client* (make-array 1001 :element-type '(unsigned-byte 8) :initial-element 1))
 (wsd:close-connection *client*);;this doesn't seem to close properly it doesn't send the
 ;;closing frame... or if it does its closed the stream before its possible to read it.
 
