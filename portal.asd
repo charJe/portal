@@ -9,7 +9,6 @@
   :depends-on (#:usocket-server
                #:alexandria
                #:arrows
-               #:global-vars
                #:str
                #:fast-http
                #:cl-base64
@@ -25,4 +24,5 @@
                (:file "resource")
                (:file "http")
                (:file "portal")
+               (:file "servers")))
 

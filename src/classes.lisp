@@ -10,6 +10,11 @@
     :accessor socket-stream
     :initarg :stream
     :type stream)
+   (opcode
+    :accessor opcode
+    :initarg :opcode
+    :type (unsigned-byte 8)
+    :documentation "The current working OPCODE.")
    (path
     :accessor path
     :initarg :path
@@ -17,9 +22,30 @@
     :documentation "The resource from header as a pathname")
    (stash
     :accessor stash
-    :initform ()
-    :type list
+    :initarg :stash
+    :type stash
     :documentation "Store the message content before all fames have arrived.")))
+
+(defclass stash ()
+  ((stash
+    :accessor stash
+    :initarg :stash
+    :initform ()
+    :type list)))
+
+(defclass uncapped-stash (stash)
+  ())
+
+(defclass capped-stash (stash)
+  ((len
+    :accessor len
+    :initform 0
+    :type fixnum)
+   (cap
+    :accessor cap
+    :initform 0
+    :initarg :cap
+    :type fixnum)))
 
 ;; socket ready state
 (defconstant +connecting+ 0)
@@ -181,6 +207,11 @@
     :initarg :paths
     :type pathname-list
     :documentation "List of pathnames")
+   (stash-cap
+    :accessor stash-cap
+    :initarg :stash-cap
+    :type (or boolean fixnum)
+    :documentation "Either nil or a fixnum used to denote maximum size of stash.")
    (origins 
     :accessor origins 
     :initarg :origins 

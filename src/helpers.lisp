@@ -53,7 +53,9 @@ This file contains helpers.
 (defun eread-byte (stream key)
   (let ((val (read-byte stream nil *noval*)))
     (when (eq val *noval*)
-      (error 'read-failure :key key))
+      (error 'read-failure
+             :key key
+             :stream stream))
     val))
   
 

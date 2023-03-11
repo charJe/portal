@@ -1,45 +1,30 @@
 (ql:quickload :websocket-driver-client)
 
 (defparameter *client* (wsd:make-client "ws://localhost:5006/echo"))
-(defparameter *server* (pws:server 5005))
-
-(pws:server-close *server*)
-
-(pws:define-resource "/echo"
-  :open (lambda (websocket)
-          (pws:send websocket "Welcome to echo server."))
-  :message (lambda (websocket message)
-             (logging "Websocket: ~S~%" websocket)
-             (sleep 1)
-             (pws:send websocket (format nil "~A from client" message))))
-
-
-
 
 (wsd:start-connection *client*)
 (wsd:on :message *client*
         (lambda (message)
           (format t "~&Got: ~A~%" message)))
-(wsd:send *client* (make-string 299 :initial-element #\h))
-(wsd:close-connection *client*)
-
-
-;;the interface
-
+(wsd:send *client* (make-array 5 :element-type '(unsigned-byte 8) :initial-element 1))
+(wsd:close-connection *client*);;this doesn't seem to close properly it doesn't send the
+;;closing frame... or if it does its closed the stream before its possible to read it.
 
 
 (defclass my-server (server)
   ()
-  (:default-initargs :port 5006
-                     :paths '(#P"/echo" #P"/foo")))
+  (:default-initargs :port 5007
+                     :paths '(#P"/echo" #P"/foo")
+                     :stash-cap 1000))
 
 (defmethod on-open ((path (eql #P"/echo")) (server my-server) websocket)
-  (format *debug-io* "Openin init."))
+  (format *debug-io* "Openin init.~%"))
 
 (defmethod on-message ((path (eql #P"/echo")) (server my-server) websocket message)
-  (send websocket (format nil "~A from client" message)))
+  (send websocket (format nil "~A from client" message))
+  (close server websocket))
 
-(defparameter *test-server* (new-server 'my-server :test))
+(defparameter *test-server* (new-server 'my-server :test2))
 
 
 

@@ -16,17 +16,19 @@
     :type fast-http:http-request))
   (:documentation "If headers are missing this is signalled."))
 
-(define-condition no-defined-resource (portal-condition)
-  ((resource
-    :accessor resource
-    :initarg :resource))
-  (:documentation "Signalled when there is no resource when one is expected."))
-
 (define-condition read-failure (portal-condition)
   ((key
     :accessor key
     :initarg :key
-    :type keyword)))
+    :type keyword)
+   (stream
+    :accessor r-stream
+    :initarg :stream
+    :type stream))
+  (:report (lambda (obj stream)
+             (format stream "Failure reading from Stream: ~A. Key: ~A."
+                     (r-stream obj)
+                     (key stream)))))
 
 (define-condition excess-length (portal-condition)
   ((fun

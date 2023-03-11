@@ -34,8 +34,8 @@
                    (progn (unless (= byte +cr+)
                             (setf crlf-count 0))
                           nil)))))
-      (do ((byte (read-byte stream nil nil)
-                 (read-byte stream nil nil)))
+      (do ((byte (eread-byte stream :headers)
+                 (eread-byte stream :headers)))
           ((double-cr byte)
            (add-val byte);;add the final linefeed
            (parse-headers

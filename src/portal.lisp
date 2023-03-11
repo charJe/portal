@@ -35,7 +35,7 @@
     (with-accessors ((paths paths)
                      (origins origins))
         server 
-      (logging "Method: ~A~%Major Version: ~A~%Minor Version: ~A~%Resource: ~A ~
+      (logging "Method: ~A~%Major Version: ~A~%Minor Version: ~A~%Resource: ~A~% ~
               upgrade: ~A~%Connection: ~A~%"                                          
                method major-version minor-version resource upgrade connection)
       (flet ((c (k) (error 'upgrade-problem :key k)))
@@ -72,7 +72,7 @@
 (defmethod append-stash ((websocket websocket) (data data))
   (with-accessors ((stash stash))
       websocket
-    (logging "Adding ~A of length ~D to stash."
+    (logging "Adding ~A of length ~D to stash.~%"
              (class-of data)
              (length (data data)))
     (push data stash)))
@@ -98,7 +98,7 @@
 
 (defmethod send-pong ((websocket websocket) message)
   (declare (type (array (unsigned-byte 8)) message))
-  (logging "Sending PONG with message: ~A" message)
+  (logging "Sending PONG with message: ~A~%" message)
   (when (< 125 (length message))
     (error 'excess-length
            :fun #'send-pong
@@ -112,7 +112,7 @@
 
 (defmethod send-ping ((websocket websocket) message)
   (declare (type (array (unsigned-byte 8)) message))
-  (logging "Sending PING with message: ~A" message)
+  (logging "Sending PING with message: ~A~%" message)
   (when (< 125 (length message))
     (error 'excess-length
            :fun #'send-ping
@@ -125,7 +125,7 @@
       (force-write message websocket-stream))))
 
 (defun read-length (length stream)
-  (logging "Reading length...")
+  (logging "Reading length...~%")
   (cond ((<= length 125)
          length)
         ((= length 126)
@@ -134,13 +134,13 @@
          (nibbles:read-ub64/be stream))))
 
 (defun read-mask (stream)
-  (logging "Reading mask...")
+  (logging "Reading mask...~%")
   (let ((mask (make-array 4 :element-type '(unsigned-byte 8))))
     (dotimes (index 4 mask)
       (setf (aref mask index) (eread-byte stream :read-mask)))))
      
 (defun read-payload (length mask stream)
-  (logging "Reading payload of length ~D." length)
+  (logging "Reading payload of length ~D.~%" length)
   (let ((payload (make-array length :element-type '(unsigned-byte 8))))
     (dotimes (index length payload)
       (setf (aref payload index)
@@ -152,7 +152,7 @@
   (:argument-precedence-order frame websocket server)
   (:method (server frame websocket)
     (error 'unsupported-frame :frame frame))
-  (:method :around (server frame websocket)
+  (:method :around (server (frame frame) websocket)
     (logging "Handling frame: ~A~%For Websocket: ~A~%"
              frame websocket)
     (call-next-method)))
@@ -204,7 +204,7 @@
   #.(ds "Read a from from the stream of WEBSOCKET. ~
          When the frame is the last one in a series, return the complete message. ~
          Could also return :eof, :close, :error.")
-  (logging "Reading frame.")
+  (logging "Reading frame.~%")
   (let* ((stream (socket-stream websocket))
          (b0 (eread-byte stream :eof))
          (b1 (eread-byte stream :eof))                
@@ -217,8 +217,9 @@
                    (error 'bad-mask)))
          (len (logand b1 #b1111111))
          (frame (make-frame opcode)))
-    (logging "b0: ~D. b1: ~D. Fin: ~D. Opcode: ~D. Maskbit: ~D~%. Len: ~D.~%Frame: ~A."
-             b0 b1 fin opcode maskbit len frame)
+    (setf (opcode websocket) opcode)
+    (logging "b0: ~D. b1: ~D. Fin: ~D. Opcode: ~D. Maskbit: ~D.~%Len: ~D.~%Frame type: ~A.~%"
+             b0 b1 fin opcode maskbit len (class-of frame))
       ;; client close frame
     (when (close-frame-p frame)
       (return-from read-frame frame))
@@ -227,7 +228,8 @@
            ;;read mask
            (mask (read-mask stream)))        
       (setf (len frame) len
-            (mask frame) mask)    
+            (mask frame) mask)
+      (logging "Complete frame read: ~S.~%" frame)
       (values frame fin))))
 
 (defun write-length (stream length)
@@ -282,7 +284,7 @@
     message))
 
 (defmethod send-close-frame ((websocket websocket))
-  (logging "Sending close frame.")
+  (logging "Sending close frame.~%")
   (force-write (list (+ #b10000000 +close+) 0)
                (socket-stream websocket)))
 
@@ -292,7 +294,7 @@
   (:method (server (websocket closed))
     nil)
   (:method (server (websocket websocket))
-    (logging "Closing.")
+    (logging "Closing.~%")
     ;; send close frame
     (send-close-frame websocket)
     ;; move to closing state
@@ -312,18 +314,22 @@
     nil))
 
 (defmethod handle-frame (server (frame portal-condition) websocket)
-  (cl:close (socket-stream websocket))  
+  (handler-case (cl:close (socket-stream websocket) :abort t)
+    (stream-error (c)
+      (change-class websocket 'closing)
+      (on-close (path websocket) server websocket)
+      (error c)))
   ;; close socket
   ;;spec says that we should try to read and disgard any bytes.. but says
-  ;;MAY just yeet the connectionn
-  (cl:close (socket-stream websocket) :abort t)
+  ;;MAY just yeet the connection
   ;; move to closing state
   (change-class websocket 'closing)
   ;; run function
   (on-close (path websocket) server websocket))
 
+
 (defmethod handle-frame (server (frame close) (websocket closing))
-  (close websocket)
+  (close server websocket)
   (cl:close (socket-stream websocket) :abort t))
   
 (defun handle-upgrade (server)
@@ -347,7 +353,11 @@
       (on-open (path websocket) server websocket)
       (change-class websocket 'ready)
       ;; messages
-      (read-frame-loop server)
+      (handler-case 
+          (read-frame-loop server)
+        (stream-error (c)
+          (logging "Stream error: ~A" c)          
+          nil))
       (change-class websocket 'closed))))
 ;; move to closed state
 
@@ -373,7 +383,7 @@
 
             
 (defun handle-cannot-upgrade (stream reason)
-  (logging "Cannot upgrade: ~A" reason)
+  (logging "Cannot upgrade: ~A~%" reason)
   (force-write (construct-http-response
                 (cons :version +http-version+)
                 (cons :code 400)

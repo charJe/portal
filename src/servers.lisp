@@ -24,10 +24,15 @@ multiple listening websockets.
     (quit ()
       :report "Quit?"
       (return-from new-server nil)))
-  (setf (gethash key *servers*)
-        (make-instance class :websocket (make-instance 'websocket))))
-
-
+  (let ((server (make-instance class)))
+    (setf (websocket server)
+          (make-instance 'websocket
+                         :stash 
+                         (if (stash-cap server)
+                             (make-instance 'capped-stash :cap (stash-cap server))
+                             (make-instance 'uncapped-stash))))
+    (setf (gethash key *servers*) server)))
+                                             
 (defun get-server (key)
   (or (gethash key *servers*)
       (error 'no-known-server :key key)))
