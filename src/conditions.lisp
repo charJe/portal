@@ -37,12 +37,19 @@
    (max
     :accessor max-len 
     :initarg :max)))
-    
-    
 
-   
 (define-condition frame-condition (portal-condition)
   ())
+
+(define-condition bad-control-frame (portal-condition)
+  ((frame
+    :accessor frame
+    :initarg :frame)))
+
+(define-condition length-exceeded (bad-control-frame)
+  ((length
+    :accessor len
+    :initarg :length)))
 
 (define-condition unknown-frame-op (frame-condition)
   ((op

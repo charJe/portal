@@ -1,10 +1,5 @@
 (in-package #:portal)
 
-(defvar *origin* nil
-  "If Cross-Origin-Request-Sharing is disallowed, set to the origin (www.example.com).")
-
-(defvar *debug-on-error* nil)
-
 (define-constant +sec-key+
   "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
   :test #'string=)
@@ -13,13 +8,6 @@
   "HTTP/1.1"
   :test #'string=)
 
-;; frame control codes
-(defconstant +continuation+ #x0)
-(defconstant +text+ #x1)
-(defconstant +binary+ #x2)
-(defconstant +close+ #x8)
-(defconstant +ping+ #x9)
-(defconstant +pong+ #xA)
 
 (defun check-can-upgrade (server http-request)
   #.(ds "True if the HTTP-REQUEST has qualified to be upgraded to a websocket. ~
@@ -86,7 +74,11 @@
         (call-next-method)))))
 
       
-(defmethod append-stash ((websocket websocket) (data data))
+(defgeneric append-stash (websocket frame data)
+  (:documentation
+   #.(ds "Attempts to correctly add DATA to the stash in WEBSOCKET."))
+  (:argument-precedence-order frame data websocket)
+  (:method (websocket (frame text) (data string))
   (with-accessors ((stash stash))
       websocket
     (logging "Adding ~A of length ~D to stash.~%"
@@ -166,7 +158,31 @@
     (dotimes (index 4 mask)
       (setf (aref mask index) (eread-byte stream :read-mask)))))
      
-(defun read-payload (length mask stream)
+(defgeneric read-payload (server frame length mask stream)
+  (:documentation
+   #.(ds "Attempts to read a payload from STREAM using MASK to unmask. ~
+          There are constraints on the size of certain bits of data. ~
+          So FRAME is used to check those constraints.")))
+
+(defmethod read-payload :before (server (frame control-frame) length mask stream)
+  (when (< +control-frame-max-payload-size+ length)
+    (error 'length-exceeded :length length
+                            :frame frame)))
+
+(defmethod read-payload :before (server (frame data-frame) length mask stream)
+  (let* ((soc (websocket server))
+         (stash (stash soc)))
+    (when (capped-stash-p stash)
+      (with-accessors ((stash stash)
+                       (cap cap))
+          stash 
+        (let ((len (flexi-streams:output-stream-sequence-length stash)))
+          (when (< cap (+ len length))
+            (error 'length-exceeded
+                   :length length
+                   :frame frame)))))))
+                               
+(defmethod read-payload (server frame length mask stream)
   (logging "Reading payload of length ~D.~%" length)
   (let ((payload (make-array length :element-type '(unsigned-byte 8))))
     (dotimes (index length payload)
@@ -206,27 +222,44 @@
       ;;no payload if its 0
       (read-payload len mask (socket-stream websocket)))))
       
+(defmethod handle-frame (server (frame continuation) websocket)
+  (logging "Continuation frame.~%")
+  (logging "Changing class of continuation to ~A~%." (continuation-type websocket))
+  (change-class frame (continuation-type websocket))
+  (handle-frame server frame websocket)
+  (on-fragmentation (path websocket) server websocket (stash websocket)))
+
 (defmethod handle-frame (server (frame text) websocket)
   (with-accessors ((len len)
                    (mask mask))
       frame
-    (let* ((payload (read-payload len mask (socket-stream websocket)))
-           (data (handler-case
+    (let* ((payload (read-payload server frame len mask (socket-stream websocket)))
+           (text (handler-case
                      ;; payload must be valid utf-8
                      (octets-to-string payload)
                    (serious-condition ()
-                     (error 'not-utf8))))
-           (text (make-instance 'text-data :data data)))
-      (append-stash websocket text))))
+                     (error 'not-utf8)))))
+      (append-stash websocket frame text))))
 
 (defmethod handle-frame (server (frame binary) websocket)
   (with-accessors ((len len)
                    (mask mask))
       frame
-    (let* ((payload (read-payload len mask (socket-stream websocket)))
-           (binary (make-instance 'binary-data :data payload)))
-      (append-stash websocket binary))))
+    (let* ((binary (read-payload server frame len mask (socket-stream websocket))))
+      (append-stash websocket frame binary))))
        
+(defun fragmentedp (websocket)
+  (continuation-type websocket))
+
+(defun configure-fragmentation (websocket frame)
+  (setf (continuation-type websocket) (class-of frame)))
+
+(defun start-of-fragmentation-p (websocket frame fin)
+  (when (and (not (fragmentedp websocket));already fragmented
+             (not fin);end of frame meaning its only 1 data frame.
+             (data-frame-p frame));only text or binary can be fragmented. 
+    t))
+             
 (defmethod read-frame ((websocket websocket))
   #.(ds "Read a from from the stream of WEBSOCKET. ~
          When the frame is the last one in a series, return the complete message. ~
@@ -236,20 +269,18 @@
          (b0 (eread-byte stream :eof))
          (b1 (eread-byte stream :eof))                
          (fin (< 0 (logand b0 #b10000000)))
-         (opcode (let ((opcode (logand b0 #b1111)))
-                   (if (= opcode +continuation+)
-                       (opcode websocket)
-                       opcode)))
+         (opcode (logand b0 #b1111))
          (maskbit (or (< 0 (logand b1 #b10000000))
                    (error 'bad-mask)))
          (len (logand b1 #b1111111))
          (frame (make-frame opcode)))
     (setf (opcode websocket) opcode)
+    (when (start-of-fragmentation-p websocket frame fin)          
+      ;;if we are not already fragmented and its not finished then we know
+      ;;that we are at the 
+      (configure-fragmentation websocket frame))
     (logging "b0: ~D. b1: ~D. Fin: ~D. Opcode: ~D. Maskbit: ~D.~%Len: ~D.~%Frame type: ~A.~%"
              b0 b1 fin opcode maskbit len (class-of frame))
-      ;; client close frame
-    (when (close-frame-p frame)
-      (return-from read-frame frame))
       ;; read length
     (let* ((len (read-length len stream))
            ;;read mask

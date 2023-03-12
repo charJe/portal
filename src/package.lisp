@@ -12,15 +12,11 @@
                 #:->
                 #:->>
                 #:-<>>)
-  (:import-from #:parse-float
-                #:parse-float)
-  (:export #:define-resource
-           #:websocket
+  (:export #:websocket
            #:header
            #:ready-state
            #:send
            #:send-ping
            #:close
            #:server
-           #:server-close
-           #:*debug-on-error*))
+           #:server-close))

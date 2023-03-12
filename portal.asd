@@ -14,8 +14,7 @@
                #:cl-base64
                #:ironclad
                #:babel
-               #:nibbles
-               #:parse-float)
+               #:nibbles)
   :pathname "src"
   :components ((:file "package")
                (:file "helpers")

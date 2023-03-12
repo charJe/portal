@@ -20,6 +20,15 @@
     :initarg :path
     :type pathname
     :documentation "The resource from header as a pathname")
+   (continuation-type
+    :accessor continuation-type
+    :initarg :continuation-type
+    :initform nil
+    :type (or null frame)
+    :documentation
+    #.(ds "When a data-frame is received which doesn't contain a fin, this means we are ~
+           dealing with fragmented data. The continuation type is set to the type of ~
+           frame for the first type which initiates the fragmentation."))
    (stash
     :accessor stash
     :initarg :stash
@@ -30,22 +39,25 @@
   ((stash
     :accessor stash
     :initarg :stash
-    :initform ()
-    :type list)))
+    :initform nil
+    :type (or null flexi-streams:flexi-output-stream))))
+
+(defgeneric capped-stash-p (stash)
+  (:method ((capped-stash stash))
+    t)
+  (:method (c)
+    nil))
 
 (defclass uncapped-stash (stash)
   ())
 
 (defclass capped-stash (stash)
-  ((len
-    :accessor len
-    :initform 0
-    :type fixnum)
-   (cap
+  ((cap
     :accessor cap
     :initform 0
     :initarg :cap
-    :type fixnum)))
+    :type fixnum
+    :documentation "Maximum size of the stash. Stops OOMs.")))
 
 ;; socket ready state
 (defconstant +connecting+ 0)
@@ -70,19 +82,6 @@
   ()
   (:documentation "When the websocket is closed."))
 
-(defclass data ()
-  ((data
-    :reader data
-    :initarg :data)))
-
-(defclass binary-data (data)
-  ((data
-    :type (array (unsigned-byte 8) (*)))))
-
-(defclass text-data (data)
-  ((data
-    :type string)))
-
 (defmethod print-object ((data data) stream)
   (print-unreadable-object (data stream :type t)
     (format stream "Length: ~A"
@@ -104,7 +103,7 @@
 
 (defmethod print-object ((frame frame) stream)
   (print-unreadable-object (frame stream :type t)
-    (format stream "op: #x~x~%Mask: ~A.~%Length: ~D."
+    (format stream "op: #x~x. Mask: ~A. Length: ~D."
             (slot-value frame 'op)
             (if (slot-boundp frame 'mask)
                 (mask frame)
@@ -124,9 +123,9 @@
 
 (defparameter *frame->class* (make-hash-table :test #'eql :size 6))
 
-(defmacro defframe (name code slots doc)
+(defmacro defframe (name code (&optional (super 'frame)) slots doc)
   `(let ((class
-           (defclass ,name (frame)
+           (defclass ,name ,(list super)
              ,slots
              (:documentation ,doc)
              (:default-initargs :op ,code))))
@@ -142,31 +141,46 @@
                 'reserved-control-frame)
                (t (error 'unknown-frame-op)))))))
 
-(defframe continuation #x0
-  ()
+(defclass control-frame (frame)
+  ())
+
+(define-constant +control-frame-max-payload-size+ 125
+  :test #'=)
+
+(defclass data-frame (frame)
+  ())
+
+(defgeneric data-frame-p (frame)
+  (:method ((frame data-frame))
+    t)
+  (:method (frame)
+    nil))
+                                     
+(defframe continuation #x0 ()
+          ()          
   "Continuation frame")
 
-(defframe text #x1
+(defframe text #x1 (data-frame)
   ((data
     :accessor data
     :type string))
   "text frame")
 
-(defframe binary #x2
+(defframe binary #x2 (data-frame)
   ((data
     :accessor data
     :type (array (unsigned-byte 8) (*))))
   "Binary frame")
 
-(defframe close #x8
+(defframe close #x8 (control-frame)
   ()
   "Close frame")
 
-(defframe ping #x9
+(defframe ping #x9 (control-frame)
   ()
   "Ping frame")
 
-(defframe pong #xA
+(defframe pong #xA (control-frame)
   ()
   "Pong frame")
 

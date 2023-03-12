@@ -21,11 +21,23 @@ provide functionality for the websocket.
   (:argument-precedence-order server path message websocket)
   (:documentation
    #.(ds "This generic function is specialized in order to provide functionality when ~
-          a connection sends a complete message. ~
+          a connection sends one complete message. ~
           Specialize the PATH using an EQL #P<mypath> in order to have the correct ~
           method called and subclass server. ~
           Precedence is: SERVER PATH MESSAGE WEBSOCKET.
           Has to be specialized.")))
+
+(defgeneric on-fragmentation (path server websocket message)
+  (:argument-precedence-order server path message websocket)
+  (:documentation
+   #.(ds "This generic function is specialized in order to provide functionality when ~
+          a connection sends part of a message using fragmentation. ~
+          upon receipt of a new part of a message this is called. ~
+          This allows for the effective streaming of data. ~
+          Precedence is: SERVER PATH MESSAGE WEBSOCKET. ~
+          By default does nothing."))
+  (:method (path server websocket message)
+    nil))
 
 (defgeneric on-close (path server websocket)
   (:argument-precedence-order server path websocket)
