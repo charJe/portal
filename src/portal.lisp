@@ -23,7 +23,7 @@
     (with-accessors ((paths paths)
                      (origins origins))
         server 
-      (logging "Method: ~A~%Major Version: ~A~%Minor Version: ~A~%Resource: ~A~% ~
+      (logging "~2%Method: ~A~%Major Version: ~A~%Minor Version: ~A~%Resource: ~A~% ~
               upgrade: ~A~%Connection: ~A~%"                                          
                method major-version minor-version resource upgrade connection)
       (flet ((c (k) (error 'upgrade-problem :key k)))
@@ -57,64 +57,6 @@
         (serious-condition ()
           (c :request)))))))
 
-
-(defgeneric data-final-type (data)
-  (:method ((data text-data))
-    'string)
-  (:method ((data binary-data))
-    'vector))
-
-(defmethod get-stash ((websocket websocket))  
-  (with-accessors ((stash stash))
-      websocket
-    (with-accessors ((stash stash))
-        stash 
-      (apply #'concatenate (data-final-type (first stash))
-             (let ((data ()))
-               (dolist (s stash data)
-                 (push (data s) data)))))))
-                     
-(defgeneric reset-stash (stash)
-  (:documentation "Reset stash back to its original state.")
-  (:method ((stash stash))
-    (setf (stash stash) ()))
-  (:method ((stash capped-stash))
-    (setf (len stash) 0)
-    (call-next-method)))
-
-(defmethod clear-stash ((websocket websocket))
-  (with-accessors ((stash stash))
-      websocket
-    (reset-stash stash)))
-
-(defmethod send-pong ((websocket websocket) message)
-  (declare (type (array (unsigned-byte 8)) message))
-  (logging "Sending PONG with message: ~A~%" message)
-  (when (< 125 (length message))
-    (error 'excess-length
-           :fun #'send-pong
-           :max 125))
-  (with-slots ((websocket-stream websocket-stream))
-      websocket
-    (let ((seq (list (+ #b10000000 +pong+)
-                     (length message))))
-      (write-sequence seq websocket-stream)
-      (force-write message websocket-stream))))
-
-(defmethod send-ping ((websocket websocket) message)
-  (declare (type (array (unsigned-byte 8)) message))
-  (logging "Sending PING with message: ~A~%" message)
-  (when (< 125 (length message))
-    (error 'excess-length
-           :fun #'send-ping
-           :max 125))
-  (with-slots ((websocket-stream websocket-stream))
-      websocket
-    (let ((seq (list (+ #b10000000 +ping+)
-                     (length message))))
-      (write-sequence seq websocket-stream)
-      (force-write message websocket-stream))))
-
 (defun read-length (length stream)
   (logging "Reading length...~%")
   (cond ((<= length 125)
@@ -142,17 +84,12 @@
                             :frame frame)))
 
 (defmethod read-payload :before (server (frame data-frame) length mask stream)
-  (let* ((soc (websocket server))
-         (stash (stash soc)))
-    (when (capped-stash-p stash)
-      (with-accessors ((stash stash)
-                       (cap cap))
-          stash 
-        (let ((len (flexi-streams:output-stream-sequence-length stash)))
-          (when (< cap (+ len length))
-            (error 'length-exceeded
-                   :length length
-                   :frame frame)))))))
+  (with-accessors ((cap cap))
+      server        
+    (when (<= cap length)
+      (error 'length-exceeded
+             :length length
+             :frame frame))))
                                
 (defmethod read-payload (server frame length mask stream)
   (logging "Reading payload of length ~D.~%" length)
@@ -162,65 +99,11 @@
             (logxor (eread-byte stream :read-payload)
                     (elt mask (mod index 4)))))))
 
-(defgeneric handle-frame (server frame websocket)
-  (:documentation "Attempt to correctly handle FRAME for WEBSOCKET.")
-  (:argument-precedence-order frame websocket server)
-  (:method (server frame websocket)
-    (error 'unsupported-frame :frame frame))
-  (:method :around (server (frame frame) websocket)
-    (logging "Handling frame: ~A~%For Websocket: ~A~%"
-             frame websocket)
-    (call-next-method)))
-
 (defgeneric close-frame-p (frame)
   (:method ((c close))
     t)
   (:method (c)
     nil))
-
-(defmethod handle-frame (server (frame ping) websocket)
-  (with-accessors ((len len)
-                   (mask mask))
-      frame
-    (send-pong websocket (if (zerop len)
-                             (make-array 0 :element-type '(unsigned-byte 8))
-                             (read-payload len mask (socket-stream websocket))))))
-
-(defmethod handle-frame (server (frame pong) websocket)
-  (with-accessors ((len len)
-                   (mask mask))
-      frame
-    (unless (zerop len)
-      ;;no payload if its 0
-      (read-payload len mask (socket-stream websocket)))))
-      
-(defmethod handle-frame (server (frame continuation) websocket)
-  (logging "Continuation frame.~%")
-  (logging "Changing class of continuation to ~A~%." (continuation-type websocket))
-  (change-class frame (continuation-type websocket))
-  (handle-frame server frame websocket)
-  (on-fragmentation (path websocket) server websocket (stash websocket)))
-
-(defmethod handle-frame (server (frame text) websocket)
-  (with-accessors ((len len)
-                   (mask mask))
-      frame
-    (let* ((payload (read-payload server frame len mask (socket-stream websocket)))
-           (text (handler-case
-                     ;; payload must be valid utf-8
-                     (octets-to-string payload)
-                   (serious-condition ()
-                     (error 'not-utf8)))))
-      (logging "Text received: ~A.~%" text)
-      (on-message (path websocket) server websocket text))))
-
-(defmethod handle-frame (server (frame binary) websocket)
-  (with-accessors ((len len)
-                   (mask mask))
-      frame
-    (let* ((binary (read-payload server frame len mask (socket-stream websocket))))
-      (logging "Binary received: ~A.~%" binary)
-      (on-message (path websocket) server websocket binary))))
              
 (defun fragmentedp (websocket)
   (continuation-type websocket))
@@ -228,9 +111,9 @@
 (defun configure-fragmentation (websocket frame)
   (setf (continuation-type websocket) (class-of frame)))
 
-(defun start-of-fragmentation-p (websocket frame fin)
+(defun start-of-fragmentation-p (websocket frame)
   (when (and (not (fragmentedp websocket));already fragmented
-             (not fin);end of frame meaning its only 1 data frame.
+             (not (fin frame));end of frame meaning its only 1 data frame.
              (data-frame-p frame));only text or binary can be fragmented. 
     t))
              
@@ -247,7 +130,7 @@
          (maskbit (or (< 0 (logand b1 #b10000000))
                    (error 'bad-mask)))
          (len (logand b1 #b1111111))
-         (frame (make-frame opcode)))
+         (frame (make-frame opcode :fin fin)))
     (setf (opcode websocket) opcode)
     (when (start-of-fragmentation-p websocket frame fin)          
       ;;if we are not already fragmented and its not finished then we know
@@ -262,10 +145,10 @@
       (setf (len frame) len
             (mask frame) mask)
       (logging "Complete frame read: ~S.~%" frame)
-      (values frame fin))))
+      frame)))
 
 (defun write-length (stream length)
-  (logging "Writing length: ~D." length)
+  (logging "Writing length: ~D.~%" length)
   (let ((val (+ #b00000000                      ;mask
                 (cond                           ;length
                   ((<= length 125) length)
@@ -291,79 +174,9 @@
                      shift)
                   stream))))))
 
-(defmethod send ((websocket websocket) message)
-  (logging "Sending message of length: ~D.~%To Websocket: ~A.~%"
-           (length message) websocket)
-  (let* ((stream (socket-stream websocket))
-         (binary (typep message '(array (unsigned-byte 8))))
-         (message (if (typep message '(or string (array (unsigned-byte 8))))
-                      message
-                      (format nil "~a" message)))
-         (message (if binary
-                      message
-                      (string-to-octets message)))
-         (len (length message)))
-    (declare (type number len))
-    (write-byte
-     (+ #b10000000                      ;fin
-        (if binary                      ;opcode
-            +binary+
-            +text+))
-     stream)
-    (write-length stream len)
-    ;; payload
-    (force-write message stream)
-    message))
-
-(defmethod send-close-frame ((websocket websocket))
-  (logging "Sending close frame.~%")
-  (force-write (list (+ #b10000000 +close+) 0)
-               (socket-stream websocket)))
-
-(defgeneric close (server websocket)
-  (:documentation "Close the WEBSOCKET.")
-  (:argument-precedence-order websocket server)
-  (:method (server (websocket closed))
-    nil)
-  (:method (server (websocket websocket))
-    (logging "Closing.~%")
-    ;; send close frame
-    (send-close-frame websocket)
-    ;; move to closing state
-    (change-class websocket 'closing)
-    ;; run function
-    (on-close (path websocket) server websocket)))
-
 (defun construct-http-response (&rest list)
   (string-to-octets (alist->header list)))
 
-(defgeneric ready-or-closing-p (websocket)
-  (:method ((r ready))
-    t)
-  (:method ((c closing))
-    t)
-  (:method (n)
-    nil))
-
-(defmethod handle-frame (server (frame portal-condition) websocket)
-  (handler-case (cl:close (socket-stream websocket) :abort t)
-    (stream-error (c)
-      (change-class websocket 'closing)
-      (on-close (path websocket) server websocket)
-      (error c)))
-  ;; close socket
-  ;;spec says that we should try to read and disgard any bytes.. but says
-  ;;MAY just yeet the connection
-  ;; move to closing state
-  (change-class websocket 'closing)
-  ;; run function
-  (on-close (path websocket) server websocket))
-
-
-(defmethod handle-frame (server (frame close) (websocket closing))
-  (close server websocket)
-  (cl:close (socket-stream websocket) :abort t))
-  
 (defun handle-upgrade (server)
   (with-accessors ((websocket websocket))
       server 
@@ -385,35 +198,11 @@
       (on-open (path websocket) server websocket)
       (change-class websocket 'ready)
       ;; messages
-      (handler-case 
-          (read-frame-loop server)
-        (stream-error (c)
-          (logging "Stream error: ~A" c)          
-          nil))
-      (change-class websocket 'closed))))
+      (read-frame-loop server)
+      (logging "#'read-frame-loop finished.~%"))))
+                
 ;; move to closed state
 
-(defun read-frame-loop (server)
-  (with-accessors ((websocket websocket))
-      server 
-    (while ((ready-or-closing-p websocket))
-      ;; read new payload
-      (logging "Websocket: ~A~%" websocket)
-      (multiple-value-bind (frame fin)
-          (handler-case 
-              (read-frame websocket)
-            (portal-condition (c)
-              (on-condition (path websocket) server websocket c)
-              c))
-        ;;when its fin we want to call the message resource with the stash        
-        (handle-frame server frame websocket)
-        (when fin
-          (logging "Finished sequence.~%")
-          (let ((stashed (get-stash websocket)))
-            (clear-stash websocket)
-            (on-message (path websocket) server websocket stashed)))))))
-
-            
 (defun handle-cannot-upgrade (stream reason)
   (logging "Cannot upgrade: ~A~%" reason)
   (force-write (construct-http-response
@@ -422,6 +211,36 @@
                 (cons :code-meaning "Bad Request")
                 (cons :reason reason))
                stream))
+
+
+(defgeneric ready-or-closing-p (websocket)
+  (:method ((r ready))
+    t)
+  (:method ((c closing))
+    t)
+  (:method (n)
+    nil))
+
+
+(defgeneric read-frame-loop (server)
+  (:documentation
+   #.(ds "Main loop for reading frames, handling conditions and processing the ~
+          received frames. If a condition is signalled in the primary method ~
+          then #'handle-condition is evaluated with the condition."))
+  (:method :around (server)
+    (handler-case (call-next-method)
+      (serious-condition (c)
+        (logging "Condition Signalled: ~A~%" c)
+        (handle-condition c server (websocket server)))))
+  (:method (server)
+    (with-accessors ((websocket websocket))
+        server 
+      (while ((ready-or-closing-p websocket))
+        ;; read new payload
+        (logging "Websocket: ~A~%" websocket)
+        (let ((frame (read-frame websocket)))
+          (handle-frame server frame websocket)))
+      websocket)))
 
 (defun websocket-handler (server websocket)
   ;; connect
@@ -437,4 +256,3 @@
         (upgrade-problem (c)
           ;; headers that can't upgrade
           (handle-cannot-upgrade socket-stream (string-downcase (key c))))))))
-

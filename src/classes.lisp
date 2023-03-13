@@ -65,7 +65,12 @@
     :accessor len
     :initarg :length
     :initform 0
-    :type number)))
+    :type number)
+   (fin
+    :accessor fin
+    :initarg :fin
+    :initform nil
+    :type boolean)))
 
 (defmethod print-object ((frame frame) stream)
   (print-unreadable-object (frame stream :type t)
@@ -77,7 +82,6 @@
             (if (slot-boundp frame 'length)
                 (len frame)
                 0))))
-
 
 ;; frame control codes
 (defconstant +continuation+ #x0)
@@ -97,15 +101,16 @@
              (:default-initargs :op ,code))))
      (setf (gethash ,code *frame->class*) class)))
 
-(defun make-frame (code)
+(defun make-frame (code &key keys &allow-other-keys)
   (let ((from-hash? (gethash code *frame->class* nil)))
-    (make-instance
-     (or from-hash?
-         (cond ((<= #x3 code #x7)
-                'reserved-non-control-frame)
-               ((<= #xB code #xF)
-                'reserved-control-frame)
-               (t (error 'unknown-frame-op)))))))
+    (apply #'make-instance 
+           (or from-hash?
+               (cond ((<= #x3 code #x7)
+                      'reserved-non-control-frame)
+                     ((<= #xB code #xF)
+                      'reserved-control-frame)
+                     (t (error 'unknown-frame-op))))
+           keys)))
 
 (defclass control-frame (frame)
   ())
@@ -187,9 +192,9 @@
     :initarg :paths
     :type pathname-list
     :documentation "List of pathnames")
-   (stash-cap
-    :accessor stash-cap
-    :initarg :stash-cap
+   (cap
+    :accessor cap
+    :initarg :cap
     :type (or boolean fixnum)
     :documentation "Either nil or a fixnum used to denote maximum size of stash.")
    (origins 

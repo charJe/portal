@@ -24,14 +24,8 @@ multiple listening websockets.
     (quit ()
       :report "Quit?"
       (return-from new-server nil)))
-  (let ((server (make-instance class)))
-    (setf (websocket server)
-          (make-instance 'websocket
-                         :stash 
-                         (if (stash-cap server)
-                             (make-instance 'capped-stash :cap (stash-cap server))
-                             (make-instance 'uncapped-stash))))
-    (setf (gethash key *servers*) server)))
+  (setf (gethash key *servers*)
+        (make-instance class :websocket (make-instance 'websocket))))
                                              
 (defun get-server (key)
   (or (gethash key *servers*)
@@ -44,8 +38,7 @@ multiple listening websockets.
                      (handler-bind
                          ((error
                             (lambda (condition)
-                              (format *error-output* "~A~%" condition)
-                              (unless *debug-on-error* (return-from :bail)))))
+                              (format *error-output* "~A~%" condition))))
                        (setf (socket-stream websocket) stream)
                        (websocket-handler server websocket))))
     nil
@@ -66,8 +59,9 @@ multiple listening websockets.
         server
       (unless (runningp server)
         (setf thread
-              (server server websocket :port port
-                                :multi-thread multi-thread))))))
+              (server server websocket
+                      :port port
+                      :multi-thread multi-thread))))))
 
 (defun stop-server (key)
   (let ((server (get-server key)))

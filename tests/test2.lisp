@@ -6,7 +6,7 @@
 (wsd:on :message *client*
         (lambda (message)
           (format t "~&Got: ~A~%" message)))
-(wsd:send *client* (make-array 1001 :element-type '(unsigned-byte 8) :initial-element 1))
+(wsd:send *client* (make-string 1 :initial-element #\k))
 (wsd:close-connection *client*);;this doesn't seem to close properly it doesn't send the
 ;;closing frame... or if it does its closed the stream before its possible to read it.
 
@@ -15,7 +15,7 @@
   ()
   (:default-initargs :port 5007
                      :paths '(#P"/echo" #P"/foo")
-                     :stash-cap 1000))
+                     :cap 1000))
 
 (defmethod on-open ((path (eql #P"/echo")) (server my-server) websocket)
   (format *debug-io* "Openin init.~%"))
@@ -24,7 +24,7 @@
   (send websocket (format nil "~A from client" message))
   (close server websocket))
 
-(defparameter *test-server* (new-server 'my-server :test2))
+(defparameter *test-server* (new-server 'my-server :test))
 
 
 
