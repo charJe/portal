@@ -28,36 +28,7 @@
     :documentation
     #.(ds "When a data-frame is received which doesn't contain a fin, this means we are ~
            dealing with fragmented data. The continuation type is set to the type of ~
-           frame for the first type which initiates the fragmentation."))
-   (stash
-    :accessor stash
-    :initarg :stash
-    :type stash
-    :documentation "Store the message content before all fames have arrived.")))
-
-(defclass stash ()
-  ((stash
-    :accessor stash
-    :initarg :stash
-    :initform nil
-    :type (or null flexi-streams:flexi-output-stream))))
-
-(defgeneric capped-stash-p (stash)
-  (:method ((capped-stash stash))
-    t)
-  (:method (c)
-    nil))
-
-(defclass uncapped-stash (stash)
-  ())
-
-(defclass capped-stash (stash)
-  ((cap
-    :accessor cap
-    :initform 0
-    :initarg :cap
-    :type fixnum
-    :documentation "Maximum size of the stash. Stops OOMs.")))
+           frame for the first type which initiates the fragmentation."))))
 
 ;; socket ready state
 (defconstant +connecting+ 0)

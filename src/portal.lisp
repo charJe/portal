@@ -211,15 +211,17 @@
                      (octets-to-string payload)
                    (serious-condition ()
                      (error 'not-utf8)))))
-      (append-stash websocket frame text))))
+      (logging "Text received: ~A.~%" text)
+      (on-message (path websocket) server websocket text))))
 
 (defmethod handle-frame (server (frame binary) websocket)
   (with-accessors ((len len)
                    (mask mask))
       frame
     (let* ((binary (read-payload server frame len mask (socket-stream websocket))))
-      (append-stash websocket frame binary))))
-       
+      (logging "Binary received: ~A.~%" binary)
+      (on-message (path websocket) server websocket binary))))
+             
 (defun fragmentedp (websocket)
   (continuation-type websocket))
 
