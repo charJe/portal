@@ -22,7 +22,7 @@
                (:file "classes")
                (:file "resource")
                (:file "http")
-               (:file "handle-conditions")
+               (:file "handle-condition")
                (:file "handle-frame")
                (:file "portal")
                (:file "user-funs")
