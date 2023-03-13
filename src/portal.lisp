@@ -57,34 +57,6 @@
         (serious-condition ()
           (c :request)))))))
 
-(defgeneric add-to-stash (stash data)
-  (:method ((stash stash) (data data))
-    (push data (stash stash)))
-  (:method ((stash capped-stash) (data data))
-    (with-accessors ((len len)
-                     (cap cap)
-                     (stash stash))
-        stash 
-      (let ((dlen (length (data data))))
-        (when (< cap (+ len dlen))
-          (logging "Stash exceeded.~%")
-          (error 'stash-exceeded
-                 :stash stash))
-        (incf len dlen)
-        (call-next-method)))))
-
-      
-(defgeneric append-stash (websocket frame data)
-  (:documentation
-   #.(ds "Attempts to correctly add DATA to the stash in WEBSOCKET."))
-  (:argument-precedence-order frame data websocket)
-  (:method (websocket (frame text) (data string))
-  (with-accessors ((stash stash))
-      websocket
-    (logging "Adding ~A of length ~D to stash.~%"
-             (class-of data)
-             (length (data data)))
-    (add-to-stash stash data)))
 
 (defgeneric data-final-type (data)
   (:method ((data text-data))

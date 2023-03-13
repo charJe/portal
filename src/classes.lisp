@@ -82,11 +82,6 @@
   ()
   (:documentation "When the websocket is closed."))
 
-(defmethod print-object ((data data) stream)
-  (print-unreadable-object (data stream :type t)
-    (format stream "Length: ~A"
-            (length (data data)))))
-
 (defclass frame ()
   ((op
     :initarg :op
