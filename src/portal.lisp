@@ -120,7 +120,7 @@
 (defmethod read-frame ((websocket websocket))
   #.(ds "Read a from from the stream of WEBSOCKET. ~
          When the frame is the last one in a series, return the complete message. ~
-         Could also return :eof, :close, :error.")
+         Evals to a frame.")
   (logging "Reading frame.~%")
   (let* ((stream (socket-stream websocket))
          (b0 (eread-byte stream :eof))
@@ -174,9 +174,6 @@
                      shift)
                   stream))))))
 
-(defun construct-http-response (&rest list)
-  (string-to-octets (alist->header list)))
-
 (defun handle-upgrade (server)
   (with-accessors ((websocket websocket))
       server 
@@ -184,15 +181,13 @@
                      (header header))
         websocket
       ;; send accept response header
-      (force-write (construct-http-response      
-                    (cons :version +http-version+)
-                    (cons :code 101)
-                    (cons :code-meaning "Switching Protocols")
-                    (cons :upgrade "websocket")
-                    (cons :connection "Upgrade")
-                    (cons :sec-websocket-accept
-                          (sha1-base64 (str:concat (sec-websocket-key header)
-                                                   +sec-key+))))
+      (force-write (build-header +http-version+ 101
+                                 "Switching Protocols"
+                                 :upgrade "websocket"
+                                 :connection "Upgrade"
+                                 :sec-websocket-accept
+                                 (sha1-base64 (str:concat (sec-websocket-key header)
+                                                          +sec-key+)))
                    socket-stream)
       ;; custom connect function
       (on-open (path websocket) server websocket)
@@ -205,13 +200,9 @@
 
 (defun handle-cannot-upgrade (stream reason)
   (logging "Cannot upgrade: ~A~%" reason)
-  (force-write (construct-http-response
-                (cons :version +http-version+)
-                (cons :code 400)
-                (cons :code-meaning "Bad Request")
-                (cons :reason reason))
+  (force-write (build-header +http-version+ 400 "Bad Request"                            
+                             :reason reason
                stream))
-
 
 (defgeneric ready-or-closing-p (websocket)
   (:method ((r ready))

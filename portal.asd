@@ -8,7 +8,6 @@
   :serial t
   :depends-on (#:usocket-server
                #:alexandria
-               #:arrows
                #:str
                #:fast-http
                #:cl-base64
