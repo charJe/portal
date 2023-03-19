@@ -37,9 +37,14 @@ stream was shut when it shouldn't have been.
   (send-close-frame websocket :code :FATAL 
                               :reason (format nil "Fatal error. ~A" (type-of c))))
 
+(defmethod handle-condition ((c not-utf8) server websocket)
+  ;;here we are just going to kill the connection.
+  (send-close-frame websocket :code :INCOSISTENT-TYPE
+                              :reason "Text should be UTF8."))
+
 (defmethod handle-condition ((c bad-mask) server websocket)  
   (send-close-frame websocket :code :protocol-error
-                              :reason (format nil "Bad mask.")))
+                              :reason "Bad mask."))
 
 (defmethod handle-condition ((c read-failure) server websocket)  
   (send-close-frame websocket :code :FATAL
