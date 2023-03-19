@@ -247,4 +247,9 @@
                            (handle-upgrade server))
         (upgrade-problem (c)
           ;; headers that can't upgrade
-          (handle-cannot-upgrade socket-stream (string-downcase (key c))))))))
+          (handle-cannot-upgrade socket-stream (string-downcase (key c))))
+        (serious-condition (c)
+          (logging "Fatal condition in #'websocket-handler: ~A~%" c)
+          (force-close websocket)
+          nil)))))
+          

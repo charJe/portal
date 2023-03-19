@@ -69,7 +69,8 @@ go in the body of one of the resource methods.
   ;;we are supposed to add a reason and a code...
   (when code (check-valid-status-code code))
   (send-control-frame websocket +close+
-                      :code (when code (code-value code)) :message reason))
+                      :code (when code (code-value code))
+                      :message reason))
 
 (defgeneric close (server websocket &key code reason)
   (:documentation
