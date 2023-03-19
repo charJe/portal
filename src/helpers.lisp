@@ -5,7 +5,7 @@ This file contains helpers.
 
 ||#
 
-(alexandria:define-constant +crlf+
+(define-constant +crlf+
     (format nil "~C~C" #\Return #\Newline)
   :test #'string=)
 
@@ -52,6 +52,7 @@ This file contains helpers.
 
 (defmacro logging (control-string &rest arguments)
   `(when *log*
+     (format *debug-io* "~D " (local-time:timestamp-millisecond (local-time:now)))
      (format *debug-io* ,control-string ,@arguments)))
 
 (defun force-write (sequence stream &key keys &allow-other-keys)

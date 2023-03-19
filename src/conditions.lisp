@@ -92,6 +92,9 @@
    (lambda (obj stream)
      (format stream "A server by that key already exists: ~A." (key obj)))))
 
-  
-
-
+(define-condition invalid-status-code (portal-condition)
+  ((key
+    :accessor key
+    :initarg :key))
+  (:report (lambda (obj stream)
+             (format stream "Invalid status code: ~A" (key obj)))))

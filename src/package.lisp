@@ -8,10 +8,6 @@
                 #:socket
                 #:socket-server
                 #:*wildcard-host*)
-  (:import-from #:arrows
-                #:->
-                #:->>
-                #:-<>>)
   (:export #:websocket
            #:header
            #:ready-state

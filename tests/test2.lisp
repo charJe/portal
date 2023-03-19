@@ -21,10 +21,6 @@
   (format *debug-io* "Openin init.~%"))
 
 (defmethod on-message ((path (eql #P"/echo")) (server my-server) websocket message)
-  (send websocket (format nil "~A from client" message))
-  (close server websocket))
+  (send websocket (format nil "~A from client" message)))
 
 (defparameter *test-server* (new-server 'my-server :test))
-
-
-

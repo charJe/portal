@@ -24,7 +24,7 @@
     :accessor continuation-type
     :initarg :continuation-type
     :initform nil
-    :type (or null frame)
+    :type (or null class)
     :documentation
     #.(ds "When a data-frame is received which doesn't contain a fin, this means we are ~
            dealing with fragmented data. The continuation type is set to the type of ~
@@ -112,13 +112,20 @@
                      (t (error 'unknown-frame-op))))
            keys)))
 
-(defclass control-frame (frame)
+(defclass has-payload ()
+  ((payload
+    :accessor payload
+    :initarg :payload
+    :initform nil 
+    :type (or null (array (unsigned-byte 8) (*))))))
+
+(defclass control-frame (frame has-payload)
   ())
 
 (define-constant +control-frame-max-payload-size+ 125
   :test #'=)
 
-(defclass data-frame (frame)
+(defclass data-frame (frame has-payload)
   ())
 
 (defgeneric data-frame-p (frame)
@@ -144,7 +151,16 @@
   "Binary frame")
 
 (defframe close #x8 (control-frame)
-  ()
+          ((code
+            :accessor code
+            :initarg :code 
+            :initform nil 
+            :type (or null (unsigned-byte 16)))
+           (reason
+            :accessor reason
+            :initarg :reason
+            :initform nil
+            :type (or null string)))           
   "Close frame")
 
 (defframe ping #x9 (control-frame)
@@ -204,3 +220,45 @@
     :type list
     :documentation "A list of acceptable origins for websockets."))
   (:documentation "A listening websocket server."))
+
+
+(defparameter *status-codes* ()
+  "Plist of valid key->status-codes.")
+
+(defmacro defstatus-code ((key code))
+  `(push (cons ,key ,code) *status-codes*))
+
+(defstatus-code (:NORMAL 1000))
+(defstatus-code (:GOING-AWAY 1001))
+(defstatus-code (:PROTOCOL-ERROR 1002))
+(defstatus-code (:INVALID-TYPE 1003))
+(defstatus-code (:INCONSISTENT-TYPE 1007))
+(defstatus-code (:POLICY-VIOLATION 1008))
+(defstatus-code (:OVERSIZE 1009))
+(defstatus-code (:EXTENSION-NEGOTIATION-FAILURE 1010))
+(defstatus-code (:FATAL 1011))
+
+(defgeneric check-valid-status-code (code)
+  (:documentation
+   #.(ds "Uses CODE to check if its a usable status code. ~
+         If invalid signals 'invalid-status-code. ~
+         Continue restart is established to ignore this check, can also specialize the GF"))
+  (:method :around (code)
+    (restart-case
+        (or (call-next-method)
+            (error 'invalid-status-code
+                   :key code))
+      (continue ()
+        :report "Invalid code but continue anyway?"
+        t)))
+  (:method ((code symbol))
+    (assoc code *status-codes* :test #'eq))
+  (:method ((code number))
+    (rassoc code *status-codes* :test #'=)))
+
+(defgeneric code-value (code)
+  (:method ((code number))
+    code)
+  (:method ((code symbol))
+    (cdr (assoc code *status-codes* :test #'eq))))
+

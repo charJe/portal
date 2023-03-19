@@ -8,6 +8,10 @@
   "HTTP/1.1"
   :test #'string=)
 
+(define-constant +byte+ #b11111111)
+
+(define-constant +halfbyte+ #b1111)
+
 
 (defun check-can-upgrade (server http-request)
   #.(ds "True if the HTTP-REQUEST has qualified to be upgraded to a websocket. ~
@@ -117,7 +121,7 @@
              (data-frame-p frame));only text or binary can be fragmented. 
     t))
              
-(defmethod read-frame ((websocket websocket))
+(defun read-frame (websocket)
   #.(ds "Read a from from the stream of WEBSOCKET. ~
          When the frame is the last one in a series, return the complete message. ~
          Evals to a frame.")
@@ -126,13 +130,13 @@
          (b0 (eread-byte stream :eof))
          (b1 (eread-byte stream :eof))                
          (fin (< 0 (logand b0 #b10000000)))
-         (opcode (logand b0 #b1111))
+         (opcode (logand b0 +halfbyte+))
          (maskbit (or (< 0 (logand b1 #b10000000))
                    (error 'bad-mask)))
          (len (logand b1 #b1111111))
          (frame (make-frame opcode :fin fin)))
     (setf (opcode websocket) opcode)
-    (when (start-of-fragmentation-p websocket frame fin)          
+    (when (start-of-fragmentation-p websocket frame)          
       ;;if we are not already fragmented and its not finished then we know
       ;;that we are at the 
       (configure-fragmentation websocket frame))
@@ -162,7 +166,7 @@
        (loop :for place :from 7 downto 0
              :for shift = (expt 2 (* 8 place))
              :do (write-byte
-                  (/ (logand length (* #b11111111 shift))
+                  (/ (logand length (* +byte+ shift))
                      shift)
                   stream)))
       ;; extended once
@@ -170,7 +174,7 @@
        (loop :for place :from 1 downto 0
              :for shift = (expt 2 (* 8 place))
              :do (write-byte
-                  (/ (logand length (* #b11111111 shift))
+                  (/ (logand length (* +byte+ shift))
                      shift)
                   stream))))))
 
@@ -196,12 +200,10 @@
       (read-frame-loop server)
       (logging "#'read-frame-loop finished.~%"))))
                 
-;; move to closed state
-
 (defun handle-cannot-upgrade (stream reason)
   (logging "Cannot upgrade: ~A~%" reason)
   (force-write (build-header +http-version+ 400 "Bad Request"                            
-                             :reason reason
+                             :reason reason)
                stream))
 
 (defgeneric ready-or-closing-p (websocket)
@@ -211,7 +213,6 @@
     t)
   (:method (n)
     nil))
-
 
 (defgeneric read-frame-loop (server)
   (:documentation
@@ -225,7 +226,7 @@
         (handle-condition c server (websocket server)))))
   (:method (server)
     (with-accessors ((websocket websocket))
-        server 
+        server      
       (while ((ready-or-closing-p websocket))
         ;; read new payload
         (logging "Websocket: ~A~%" websocket)
