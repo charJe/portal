@@ -190,12 +190,7 @@
   (every #'pathnamep list))
 
 (defclass server ()
-  ((websocket
-    :accessor websocket
-    :initarg :websocket
-    :type websocket
-    :documentation "An instance of websocket.")
-   (port
+  ((port
     :accessor port
     :initarg :port
     :type (unsigned-byte 16)

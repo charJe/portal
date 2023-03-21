@@ -41,7 +41,6 @@ multiple listening websockets.
                               (format *error-output* "~A~%" condition))))
                        (let ((websocket (make-instance 'websocket
                                                        :stream stream)))
-                         (setf (websocket server) websocket)
                          (websocket-handler server websocket)))))
     nil
     :in-new-thread t

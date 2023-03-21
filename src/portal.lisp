@@ -184,24 +184,22 @@
            ;; extended once
            (nibbles:write-ub16/be length stream)))))
 
-(defun handle-upgrade (server)
-  (with-accessors ((websocket websocket))
-      server 
-    (with-accessors ((socket-stream socket-stream)
-                     (header header))
-        websocket
-      ;; send accept response header
-      (force-write (build-header +http-version+ 101
-                                 "Switching Protocols"
-                                 :upgrade "websocket"
-                                 :connection "Upgrade"
-                                 :sec-websocket-accept
-                                 (sha1-base64 (str:concat (sec-websocket-key header)
-                                                          +sec-key+)))
-                   socket-stream)
-      ;; custom connect function
-      (on-open (path websocket) server websocket)
-      (change-class websocket 'ready))))
+(defun handle-upgrade (server websocket)
+  (with-accessors ((socket-stream socket-stream)
+                   (header header))
+      websocket
+    ;; send accept response header
+    (force-write (build-header +http-version+ 101
+                               "Switching Protocols"
+                               :upgrade "websocket"
+                               :connection "Upgrade"
+                               :sec-websocket-accept
+                               (sha1-base64 (str:concat (sec-websocket-key header)
+                                                        +sec-key+)))
+                 socket-stream)
+    ;; custom connect function
+    (on-open (path websocket) server websocket)
+    (change-class websocket 'ready)))
 
 (defgeneric ready-or-closing-p (websocket)
   (:method ((r ready))
@@ -211,25 +209,23 @@
   (:method (n)
     nil))
 
-(defgeneric read-frame-loop (server)
+(defgeneric read-frame-loop (server websocket)
   (:documentation
    #.(ds "Main loop for reading frames, handling conditions and processing the ~
           received frames. If a condition is signalled in the primary method ~
           then #'handle-condition is evaluated with the condition."))
-  (:method :around (server)
+  (:method :around (server websocket)
     (handler-case (call-next-method)
       (serious-condition (c)
         (logging "Condition handling in #'read-frame-loop: ~A~%" c)
-        (handle-condition c server (websocket server)))))
-  (:method (server)
-    (with-accessors ((websocket websocket))
-        server      
-      (while ((ready-or-closing-p websocket))
-        ;; read new payload
-        (logging "Websocket: ~A~%" websocket)
-        (let ((frame (read-frame websocket)))
-          (handle-frame server frame websocket)))
-      websocket)))
+        (handle-condition c server websocket))))
+  (:method (server websocket)
+    (while ((ready-or-closing-p websocket))
+      ;; read new payload
+      (logging "Websocket: ~A~%" websocket)
+      (let ((frame (read-frame websocket)))
+        (handle-frame server frame websocket)))
+    websocket))
 
 (defun websocket-handler (server websocket)
   ;; connect
@@ -241,9 +237,9 @@
       (handler-case (progn (check-can-upgrade server request)
                            (setf (path websocket)
                                  (pathname (resource (header websocket))))
-                           (handle-upgrade server)
+                           (handle-upgrade server websocket)
                            (logging "Upgrade complete. ~%")
-                           (read-frame-loop server))
+                           (read-frame-loop server websocket))
         (portal-condition (c)
           (logging "Condition handling in #'websocket-handler: ~A ~%" c)
           (handle-condition c server websocket))

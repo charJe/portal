@@ -10,7 +10,6 @@ This file contains the code for handling each frame.
   (:documentation "Attempt to correctly handle FRAME for WEBSOCKET.")
   (:argument-precedence-order frame websocket server)
   (:method (server (frame frame) websocket)
-    (break "~S" frame)
     (error 'unsupported-frame :frame frame))
   (:method :around (server (frame frame) websocket)
     (logging "Handling frame: ~A~%For Websocket: ~A~%"
