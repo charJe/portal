@@ -51,7 +51,7 @@
     :accessor len
     :initarg :length)))
 
-(define-condition rsv-bit-set (frame-condition )
+(define-condition rsv-bit-set (frame-condition)
   ())
 
 (define-condition mask-not-set (frame-condition)
@@ -75,6 +75,9 @@
     :accessor stash
     :initarg :stash
     :type stash)))
+
+(define-condition close-already-sent (portal-condition)
+  ())
 
 (define-condition server-condition (portal-condition)
   ())

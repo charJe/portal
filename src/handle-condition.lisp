@@ -82,7 +82,11 @@ stream was shut when it shouldn't have been.
   (send-close-frame websocket :code :FATAL 
                               :reason (format nil "Excess len in: ~A" (fun c))))
 
-
+(defmethod handle-condition ((c close-already-sent) server websocket)
+  #.(ds "If we have sent a close in the middle of fragmented message and we receive a ~
+         continuation then we continue to read. If we receive anything other than that ~
+         Then close-already-sent is signalled. In that case we just force-close.")
+  t)
 
 (defgeneric fallback-condition-handler (condition server websocket)
   (:documentation

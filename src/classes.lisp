@@ -254,8 +254,11 @@
     (rassoc code *status-codes* :test #'=)))
 
 (defgeneric code-value (code)
+  (:documentation "Looks up the numeric value of CODE.")
   (:method ((code number))
     code)
   (:method ((code symbol))
-    (cdr (assoc code *status-codes* :test #'eq))))
+    (cdr (assoc code *status-codes* :test #'eq)))
+  (:method ((code null))
+    1000))
 

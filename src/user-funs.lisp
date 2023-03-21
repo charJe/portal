@@ -94,10 +94,12 @@ go in the body of one of the resource methods.
     (logging "Closing.~%")
     (send-close-frame websocket
                       :code (code-value code)
-                      :reason (when reason 
+                      :reason (when reason
                                 (string-to-octets reason)))
     ;; move to closing state
     (change-class websocket 'closing)
     ;;if the other side closes their stream because this is sent then it'll stream-error
     ;;and it'll get marked as closed anyway
     ))
+
+

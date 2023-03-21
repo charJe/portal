@@ -44,7 +44,7 @@ The other generic functions can be found in `/src/resource.lisp`.
 
 ### Initargs to instance of server
 
-There are a couple customizable initargs to servers.
+There are a few customizable initargs to servers.
 
 - port -- The listening port.
 - paths -- A list of pathnames (they have to be pathnames), this is where the server will listen. Allows you to specialize functionality for different URLs but the same server.
@@ -52,6 +52,32 @@ There are a couple customizable initargs to servers.
 - cap -- A size in bytes used to cap the size of fragmented messages to stop OOM.
 
 
+### User functions
+
+You can
+- `#'send`
+- `#'send-ping`
+- `#'send-pong`
+- `#'close` 
+
+You cannot send in a fragmented manner.
+
+Will
+- Attempt to finish reading fragmented messages after you send a #'close.
+
+#### Valid status codes for #'close
+
+| As keyword                     | as number |
+| --- | --- |
+| :NORMAL                        | 1000 |
+| :GOING-AWAY                    | 1001 |
+| :PROTOCOL-ERROR                | 1002 |
+| :INVALID-TYPE                  | 1003 |
+| :INCONSISTENT-TYPE             | 1007 |
+| :POLICY-VIOLATION              | 1008 |
+| :OVERSIZE                      | 1009 |
+| :EXTENSION-NEGOTIATION-FAILURE | 1010 |
+| :FATAL                         | 1011 |
 
 
 
