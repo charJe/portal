@@ -120,63 +120,69 @@
              (not (fin frame));end of frame meaning its only 1 data frame.
              (data-frame-p frame));only text or binary can be fragmented. 
     t))
-             
+
+(defun read-ws-byte-one (stream)
+  (let* ((first-byte (eread-byte stream :b0))
+         (finp (logbitp 7 first-byte))        
+         (rsv1p (logbitp 6 first-byte))
+         (rsv2p (logbitp 5 first-byte))
+         (rsv3p (logbitp 4 first-byte))
+         (opcode (logand first-byte +halfbyte+)))
+    (macrolet ((e (s) `(when ,s (error 'rsv-bit-set))))
+      (e rsv1p) (e rsv2p) (e rsv3p)
+      (values first-byte finp rsv1p rsv2p rsv3p opcode))))
+
+(defun read-ws-byte-two (stream)
+  (let* ((second-byte (eread-byte stream :b1))
+         (maskp (logbitp 7 second-byte))
+         (length (logand second-byte #b1111111)))
+    ;;we are acting a server. mask must always be set
+    (unless maskp
+      (error 'mask-not-set))
+    (values second-byte maskp length)))
+    
 (defun read-frame (websocket)
   #.(ds "Read a from from the stream of WEBSOCKET. ~
          When the frame is the last one in a series, return the complete message. ~
          Evals to a frame.")
   (logging "Reading frame.~%")
-  (let* ((stream (socket-stream websocket))
-         (b0 (eread-byte stream :eof))
-         (b1 (eread-byte stream :eof))                
-         (fin (< 0 (logand b0 #b10000000)))
-         (opcode (logand b0 +halfbyte+))
-         (maskbit (or (< 0 (logand b1 #b10000000))
-                   (error 'bad-mask)))
-         (len (logand b1 #b1111111))
-         (frame (make-frame opcode :fin fin)))
-    (setf (opcode websocket) opcode)
-    (when (start-of-fragmentation-p websocket frame)          
-      ;;if we are not already fragmented and its not finished then we know
-      ;;that we are at the 
-      (configure-fragmentation websocket frame))
-    (logging "b0: ~D. b1: ~D. Fin: ~D. Opcode: ~D. Maskbit: ~D.~%Len: ~D.~%Frame type: ~A.~%"
-             b0 b1 fin opcode maskbit len (class-of frame))
-      ;; read length
-    (let* ((len (read-length len stream))
-           ;;read mask
-           (mask (read-mask stream)))        
-      (setf (len frame) len
-            (mask frame) mask)
-      (logging "Complete frame read: ~S.~%" frame)
-      frame)))
+  (let ((stream (socket-stream websocket)))
+  (multiple-value-bind (b0 fin rsv1p rsv2p rsv3p opcode)
+      (read-ws-byte-one stream)
+    (declare (ignore rsv1p rsv2p rsv3p))
+    (multiple-value-bind (b1 maskbit len)
+        (read-ws-byte-two stream)
+      (let ((frame (make-frame opcode :fin fin)))
+        (logging "b0: ~b. b1: ~b. Fin: ~A. Opcode: ~b. ~
+                  Maskbit: ~b.~%Len: ~D.~%Frame type: ~A.~%"
+                 b0 b1 fin opcode maskbit len (class-of frame))                        
+        (setf (opcode websocket) opcode)
+        (when (start-of-fragmentation-p websocket frame)          
+          ;;if we are not already fragmented and its not finished then we know
+          ;;that we are at the 
+          (configure-fragmentation websocket frame))      
+        ;; read length
+        (let* ((len (read-length len stream))
+               ;;read mask
+               (mask (read-mask stream)))        
+          (setf (len frame) len
+                (mask frame) mask)
+          (logging "Complete frame read: ~S.~%" frame)
+          frame))))))
 
 (defun write-length (stream length)
   (logging "Writing length: ~D.~%" length)
-  (let ((val (+ #b00000000                      ;mask
-                (cond                           ;length
-                  ((<= length 125) length)
-                  ((<= length (expt 2 16)) 126)
-                  ((< (expt 2 16) length) 127)))))
+  (let* ((2-to-16 65536)
+         (val (cond ((<= length 125) length)
+                    ((<= length 2-to-16) 126)
+                    ((< 2-to-16 length) 127))))
     (write-byte val stream)
     ;; extended length length
-    (cond
-      ;; extended twice
-      ((< (expt 2 16) length)
-       (loop :for place :from 7 downto 0
-             :for shift = (expt 2 (* 8 place))
-             :do (write-byte
-                  (/ (logand length (* +byte+ shift))
-                     shift)
-                  stream)))
-      ;; extended once
-       ((<= 125 length)
-       (loop :for place :from 1 downto 0
-             :for shift = (expt 2 (* 8 place))
-             :do (write-byte
-                  (/ (logand length (* +byte+ shift))
-                     shift)
-                  stream))))))
+    (cond ((< 2-to-16 length)
+           (nibbles:write-ub64/be length stream))
+          ((<= 125 length)
+           ;; extended once
+           (nibbles:write-ub16/be length stream)))))
 
 (defun handle-upgrade (server)
   (with-accessors ((websocket websocket))
@@ -195,16 +201,7 @@
                    socket-stream)
       ;; custom connect function
       (on-open (path websocket) server websocket)
-      (change-class websocket 'ready)
-      ;; messages
-      (read-frame-loop server)
-      (logging "#'read-frame-loop finished.~%"))))
-                
-(defun handle-cannot-upgrade (stream reason)
-  (logging "Cannot upgrade: ~A~%" reason)
-  (force-write (build-header +http-version+ 400 "Bad Request"                            
-                             :reason reason)
-               stream))
+      (change-class websocket 'ready))))
 
 (defgeneric ready-or-closing-p (websocket)
   (:method ((r ready))
@@ -222,7 +219,7 @@
   (:method :around (server)
     (handler-case (call-next-method)
       (serious-condition (c)
-        (logging "Condition Signalled: ~A~%" c)
+        (logging "Condition handling in #'read-frame-loop: ~A~%" c)
         (handle-condition c server (websocket server)))))
   (:method (server)
     (with-accessors ((websocket websocket))
@@ -244,12 +241,13 @@
       (handler-case (progn (check-can-upgrade server request)
                            (setf (path websocket)
                                  (pathname (resource (header websocket))))
-                           (handle-upgrade server))
-        (upgrade-problem (c)
-          ;; headers that can't upgrade
-          (handle-cannot-upgrade socket-stream (string-downcase (key c))))
+                           (handle-upgrade server)
+                           (logging "Upgrade complete. ~%")
+                           (read-frame-loop server))
+        (portal-condition (c)
+          (logging "Condition handling in #'websocket-handler: ~A ~%" c)
+          (handle-condition c server websocket))
         (serious-condition (c)
-          (logging "Fatal condition in #'websocket-handler: ~A~%" c)
-          (force-close websocket)
-          nil)))))
+          ;;this is a fallback condition handler.
+          (fallback-condition-handler c server websocket))))))
           

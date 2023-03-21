@@ -25,13 +25,13 @@ multiple listening websockets.
       :report "Quit?"
       (return-from new-server nil)))
   (setf (gethash key *servers*)
-        (make-instance class :websocket (make-instance 'websocket))))
+        (make-instance class)))
                                              
 (defun get-server (key)
   (or (gethash key *servers*)
       (error 'no-known-server :key key)))
                          
-(defun server (server websocket &key (port 4433) (multi-thread nil))
+(defun server (server &key (port 4433) (multi-thread nil))
   (socket-server *wildcard-host* port
                  (lambda (stream)
                    (block :bail
@@ -39,8 +39,10 @@ multiple listening websockets.
                          ((error
                             (lambda (condition)
                               (format *error-output* "~A~%" condition))))
-                       (setf (socket-stream websocket) stream)
-                       (websocket-handler server websocket))))
+                       (let ((websocket (make-instance 'websocket
+                                                       :stream stream)))
+                         (setf (websocket server) websocket)
+                         (websocket-handler server websocket)))))
     nil
     :in-new-thread t
     :multi-threading multi-thread
@@ -54,14 +56,12 @@ multiple listening websockets.
 (defun start-server (key &key (multi-thread nil))
   (let ((server (get-server key)))
     (with-accessors ((thread thread)
-                     (websocket websocket)
                      (port port))
         server
       (unless (runningp server)
         (setf thread
-              (server server websocket
-                      :port port
-                      :multi-thread multi-thread))))))
+              (server server :port port
+                             :multi-thread multi-thread))))))
 
 (defun stop-server (key)
   (let ((server (get-server key)))

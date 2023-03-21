@@ -69,19 +69,21 @@
    (fin
     :accessor fin
     :initarg :fin
-    :initform nil
     :type boolean)))
 
 (defmethod print-object ((frame frame) stream)
   (print-unreadable-object (frame stream :type t)
-    (format stream "op: #x~x. Mask: ~A. Length: ~D."
+    (format stream "op: #x~x. Mask: ~A. Length: ~D. Fin: ~A."
             (slot-value frame 'op)
             (if (slot-boundp frame 'mask)
                 (mask frame)
                 "NOT SET")
             (if (slot-boundp frame 'length)
                 (len frame)
-                0))))
+                0)
+            (if (slot-boundp frame 'fin)
+                (fin frame)
+                "NOT SET"))))
 
 ;; frame control codes
 (defconstant +continuation+ #x0)
@@ -101,7 +103,7 @@
              (:default-initargs :op ,code))))
      (setf (gethash ,code *frame->class*) class)))
 
-(defun make-frame (code &key keys &allow-other-keys)
+(defun make-frame (code &rest keys &key &allow-other-keys)
   (let ((from-hash? (gethash code *frame->class* nil)))
     (apply #'make-instance 
            (or from-hash?

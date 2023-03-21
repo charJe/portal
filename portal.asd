@@ -9,6 +9,7 @@
   :depends-on (#:usocket-server
                #:alexandria
                #:str
+               #:local-time
                #:fast-http
                #:cl-base64
                #:ironclad

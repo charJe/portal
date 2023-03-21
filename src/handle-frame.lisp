@@ -9,7 +9,8 @@ This file contains the code for handling each frame.
 (defgeneric handle-frame (server frame websocket)
   (:documentation "Attempt to correctly handle FRAME for WEBSOCKET.")
   (:argument-precedence-order frame websocket server)
-  (:method (server frame websocket)
+  (:method (server (frame frame) websocket)
+    (break "~S" frame)
     (error 'unsupported-frame :frame frame))
   (:method :around (server (frame frame) websocket)
     (logging "Handling frame: ~A~%For Websocket: ~A~%"
@@ -62,7 +63,8 @@ This file contains the code for handling each frame.
     (logging "Binary received: ~A.~%" payload)
     (on-message (path websocket) server websocket payload)))
 
-(defmethod handle-frame :before (server (frame close) websocket)
+(defun extract-code-and-reason (frame)
+  "Extract the code and the reason from close frame."
   (with-accessors ((payload payload)
                    (code code)
                    (reason reason))
@@ -79,13 +81,14 @@ This file contains the code for handling each frame.
                   (error 'not-utf8)))
               code (nibbles:ub16ref/be code-ar 0))))))
                         
-(defmethod handle-frame (server (frame close) (websocket closing))
+(defmethod handle-frame (server (frame close) websocket)
+  (extract-code-and-reason frame)
   (with-accessors ((code code)
                    (reason reason))
       frame
     (when (and code reason)
       (logging "Code: ~D.~%Reason: ~A.~%" code reason))
-    (send-close-frame websocket);;missing code and reason
+    (send-close-frame websocket :code (or code :NORMAL))
     (force-close websocket)
     (change-class websocket 'closed)
     (on-close (path websocket) server websocket)))

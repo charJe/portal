@@ -28,7 +28,7 @@
   (:report (lambda (obj stream)
              (format stream "Failure reading from Stream: ~A. Key: ~A."
                      (r-stream obj)
-                     (key stream)))))
+                     (key obj)))))
 
 (define-condition excess-length (portal-condition)
   ((fun
@@ -51,13 +51,16 @@
     :accessor len
     :initarg :length)))
 
+(define-condition rsv-bit-set (frame-condition )
+  ())
+
+(define-condition mask-not-set (frame-condition)
+  ())
+
 (define-condition unknown-frame-op (frame-condition)
   ((op
     :accessor op
     :initarg :op)))
-
-(define-condition bad-mask (frame-condition)
-  ())
 
 (define-condition not-utf8 (frame-condition)
   ())

@@ -9,7 +9,7 @@ go in the body of one of the resource methods.
   "Send control frame on WEBSOCKET with MESSAGE of OP. Message cant exceed 125 bytes."
   (check-type op (unsigned-byte 8))
   (check-type message (or null (array (unsigned-byte 8) (*))))
-  (check-type code (or null (unsigned-byte 8)))
+  (check-type code (or null (unsigned-byte 16)))
   (with-accessors ((socket-stream socket-stream))
       websocket
     (when (and message (< 125 (length message)))
@@ -25,14 +25,14 @@ go in the body of one of the resource methods.
 
 (defgeneric send-pong (websocket message)
   (:method ((websocket websocket) (message array))
-    (logging "Sending PONG with message as BINARY: ~A~%" (octets-to-string message))
+    (logging "Sending PONG with message: ~A~%" (octets-to-string message))
     (send-control-frame websocket +pong+ :message message))
   (:method ((websocket websocket) (message string))
     (send-pong websocket (string-to-octets message))))
   
 (defgeneric send-ping (websocket message)
   (:method ((websocket websocket) (message array))
-    (logging "Sending PING with message as BINARY: ~A~%" (octets-to-string message))
+    (logging "Sending PING with message: ~A~%" (octets-to-string message))
     (send-control-frame websocket +ping+ :message message))
   (:method ((websocket websocket) (message string))
     (send-ping websocket (string-to-octets message))))
@@ -68,9 +68,14 @@ go in the body of one of the resource methods.
   (logging "Sending close frame.~%")
   ;;we are supposed to add a reason and a code...
   (when code (check-valid-status-code code))
-  (send-control-frame websocket +close+
-                      :code (when code (code-value code))
-                      :message reason))
+  (let ((m (typecase reason
+             ((array (unsigned-byte 8) (*))
+              reason)
+             (string (string-to-octets reason))
+             (otherwise nil))))
+    (send-control-frame websocket +close+
+                        :code (when code (code-value code))
+                        :message m)))
 
 (defgeneric close (server websocket &key code reason)
   (:documentation
