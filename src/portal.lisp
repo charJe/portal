@@ -245,5 +245,4 @@
           (handle-condition c server websocket))
         (serious-condition (c)
           ;;this is a fallback condition handler.
-          (fallback-condition-handler c server websocket))))))
-          
+          (fallback-condition-handler c server websocket))))))         

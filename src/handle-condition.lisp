@@ -11,14 +11,12 @@ stream was shut when it shouldn't have been.
    #.(ds "Attempt to handle condition CONDITION correctly."))
   (:method :around (condition server websocket)
     (call-next-method)
-    (force-close websocket)
-    ;;spec says that we should try to read and disgard any bytes.. but says
-    ;;MAY just yeet the connection
-    ;; move to closing state
-    )
+    (force-close websocket))
   (:method (condition server websocket)
     (logging "Resignalling condition in #'handle-condition. ~%")
-    (error condition)))
+    (error condition))
+  (:method :after (condition server websocket)
+    (on-condition (path websocket) server websocket condition)))
 
 (defmethod handle-condition :after (condition server websocket)
   (change-class websocket 'closed)
