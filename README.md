@@ -80,5 +80,10 @@ Will
 | :FATAL                         | 1011 |
 
 
+## Stop
 
+Stop a server like
 
+```
+(stop-server :test)
+```
