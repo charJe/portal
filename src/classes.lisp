@@ -208,6 +208,7 @@
    (cap
     :accessor cap
     :initarg :cap
+    :initform nil
     :type (or boolean fixnum)
     :documentation "Either nil or a fixnum used to denote maximum size of stash.")
    (origins 

@@ -89,8 +89,9 @@
 
 (defmethod read-payload :before (server (frame data-frame) length mask stream)
   (with-accessors ((cap cap))
-      server        
-    (when (<= cap length)
+      server
+    (when (and cap
+               (<= cap length))
       (error 'length-exceeded
              :length length
              :frame frame))))
